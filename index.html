@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+    <title>SOCIAL MEDIA MANAGER TOOLS</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <div class="app" id="app">
+      <header class="topbar">
+        <div class="brand">
+          <div class="brandMark"></div>
+          <div class="brandText">
+            <div class="brandTitle" id="brandTitleText">SMMT</div>
+            <div class="brandSub" id="brandSubText">Social Media Manager Tools • Premium workspace</div>
+          </div>
+        </div>
+
+        <div class="topActions">
+          <button class="btn btnGhost" id="btnQuickAdd" type="button"><span class="btnIco" aria-hidden="true">＋</span><span id="labelBtnQuickAdd">Add</span></button>
+          <button class="btn btnGhost" id="btnSearch" type="button"><span class="btnIco" aria-hidden="true">⌕</span><span id="labelBtnSearch">Search</span></button>
+          <button class="btn btnGhost" id="btnAccount" type="button"><span class="btnIco" aria-hidden="true">◉</span><span id="labelBtnAccount">Login</span></button>
+          <button class="btn btnPrimary" id="btnBackup" type="button"><span class="btnIco" aria-hidden="true">⬒</span><span id="labelBtnBackup">Backup</span></button>
+        </div>
+      </header>
+
+      <main class="main">
+        <section class="view" id="viewDashboard" data-view="dashboard">
+          <div class="grid2">
+            <div class="card">
+                <div class="cardTitle">Account Dashboard</div>
+              <div class="metricRow">
+                <div class="metric">
+                  <div class="metricNum" id="mToday">0</div>
+                  <div class="metricLbl">posts</div>
+                </div>
+                <div class="metric">
+                  <div class="metricNum" id="mWeek">0</div>
+                  <div class="metricLbl">next 7 days</div>
+                </div>
+              </div>
+              <div class="chips" id="dashChips"></div>
+              <div class="miniActions">
+                <button class="btn btnSoft" id="dashAddPost" type="button">New Post</button>
+                <button class="btn btnSoft" id="dashAddIdea" type="button">New Idea</button>
+                <button class="btn btnSoft" id="dashOpenOrganize" type="button">Organize</button>
+                <button class="btn btnSoft" id="dashOpenTutorial" type="button">Tutorial</button>
+              </div>
+            </div>
+
+            <div class="card">
+              <div class="cardTitle">Quick Notes</div>
+              <textarea class="textarea" id="quickNotes" placeholder="Write notes, reminders, or quick content ideas here..."></textarea>
+              <div class="rowEnd">
+                <button class="btn btnSoft" id="saveNotes" type="button">Save</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Upcoming</div>
+                <div class="cardSub">Your scheduled posts for the next few days</div>
+              </div>
+              <button class="btn btnGhost" id="goCalendar" type="button">Open Calendar</button>
+            </div>
+            <div class="list" id="upcomingList"></div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewOrganize" data-view="organize">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Organize your life's work as a SMM</div>
+                <div class="cardSub">Create your perfect homes for content, clients, admin work, and growth as a beginner-friendly social media manager.</div>
+              </div>
+              <button class="btn btnSoft" id="organizeOpenTask" type="button">New Task</button>
+            </div>
+            <div class="featureGrid" id="organizeHomes"></div>
+          </div>
+
+          <div class="grid2">
+            <div class="card">
+              <div class="cardHeader">
+                <div>
+                  <div class="cardTitle">Priority today</div>
+                  <div class="cardSub">Your next important SMM steps</div>
+                </div>
+              </div>
+              <div class="list" id="organizeActionList"></div>
+            </div>
+
+            <div class="card">
+              <div class="cardHeader">
+                <div>
+                  <div class="cardTitle">SMM workspace snapshot</div>
+                  <div class="cardSub">All-in-one view of notes, docs, posts, and client flow</div>
+                </div>
+              </div>
+              <div class="infoGrid" id="organizeSummary"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewNotesBoard" data-view="notes">
+          <div class="grid2">
+            <div class="card">
+              <div class="cardHeader">
+                <div>
+                  <div class="cardTitle">SMM Notes</div>
+                  <div class="cardSub">Daily notes, client reminders, ideas, deliverables, and follow-up reminders</div>
+                </div>
+                <button class="btn btnPrimary" id="saveNotesPad" type="button">Save Notes</button>
+              </div>
+              <textarea class="textarea notesPad" id="notesPad" placeholder="Write your SMM daily notes here: client updates, posting reminders, content to review, revisions, invoices, hashtags, caption ideas..."></textarea>
+            </div>
+
+            <div class="card">
+              <div class="cardHeader">
+                <div>
+                  <div class="cardTitle">My Tasks</div>
+                  <div class="cardSub">Track what you need to do as a social media manager</div>
+                </div>
+                <button class="btn btnSoft" id="newTaskBtn" type="button">New Task</button>
+              </div>
+              <div class="smallRow">
+                <input class="input" id="taskSearch" placeholder="Search task..." />
+                <select class="select" id="taskStatusFilter">
+                  <option value="">All Status</option>
+                  <option value="todo">To Do</option>
+                  <option value="doing">Doing</option>
+                  <option value="done">Done</option>
+                </select>
+              </div>
+              <div class="list" id="tasksList"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewDocsBoard" data-view="docs">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Editable Docs</div>
+                <div class="cardSub">Keep scripts, SOPs, client briefs, caption drafts, content plans, and internal documents in one place</div>
+              </div>
+              <button class="btn btnSoft" id="newDocBtn" type="button">New Doc</button>
+            </div>
+            <div class="smallRow">
+              <input class="input" id="docSearch" placeholder="Search doc title or content..." />
+              <select class="select" id="docTypeFilter">
+                <option value="">All Types</option>
+                <option value="brief">Brief</option>
+                <option value="caption">Caption</option>
+                <option value="plan">Plan</option>
+                <option value="sop">SOP</option>
+                <option value="report">Report</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div class="list" id="docsList"></div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewCalendar" data-view="calendar">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Content Calendar</div>
+                <div class="cardSub" id="calSub">Month view</div>
+              </div>
+              <div class="seg">
+                <button class="btn btnGhost" id="calPrev" type="button">Prev</button>
+                <button class="btn btnGhost" id="calToday" type="button">Today</button>
+                <button class="btn btnGhost" id="calNext" type="button">Next</button>
+              </div>
+            </div>
+
+            <div class="weekdayRow" id="weekdayRow"></div>
+            <div class="calendarGrid" id="calendarGrid"></div>
+          </div>
+
+          <div class="hint">
+            Tip: tap a date cell to review the posts for that day and add a new one.
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewPosts" data-view="posts">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Post / Library</div>
+                <div class="cardSub">Editable posts for copy-paste, plus your saved content library</div>
+              </div>
+              <button class="btn btnSoft" id="newPost" type="button">New Post</button>
+            </div>
+
+            <div class="filters">
+              <input class="input" id="postSearch" placeholder="Search title/caption..." />
+              <select class="select" id="postStatus">
+                <option value="">All Status</option>
+                <option value="Idea">Idea</option>
+                <option value="Draft">Draft</option>
+                <option value="Ready">Ready</option>
+                <option value="Posted">Posted</option>
+                <option value="Archived">Archived</option>
+              </select>
+              <select class="select" id="postPlatform">
+                <option value="">All Platforms</option>
+                <option value="Facebook">Facebook</option>
+                <option value="Instagram">Instagram</option>
+                <option value="TikTok">TikTok</option>
+                <option value="Pinterest">Pinterest</option>
+                <option value="YouTube">YouTube</option>
+                <option value="Threads">Threads</option>
+                <option value="Other">Other</option>
+              </select>
+            </div>
+
+            <div class="list" id="postsList"></div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewPillars" data-view="pillars">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Content Pillars</div>
+                <div class="cardSub">Keep your content categories organized</div>
+              </div>
+              <button class="btn btnSoft" id="newPillar" type="button">New Pillar</button>
+            </div>
+
+            <div class="list" id="pillarsList"></div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewIdeas" data-view="ideas">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Idea Bank</div>
+                <div class="cardSub">Save ideas fast and convert them into posts later</div>
+              </div>
+              <button class="btn btnSoft" id="newIdea" type="button">New Idea</button>
+            </div>
+
+            <div class="filters">
+              <input class="input" id="ideaSearch" placeholder="Search ideas..." />
+              <select class="select" id="ideaTagFilter">
+                <option value="">All Tags</option>
+              </select>
+            </div>
+
+            <div class="list" id="ideasList"></div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewAssets" data-view="assets">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Asset Library</div>
+                <div class="cardSub">Upload images you can attach to posts</div>
+              </div>
+              <label class="btn btnSoft fileBtn">
+                Upload
+                <input id="assetUpload" type="file" accept="image/*" multiple />
+              </label>
+            </div>
+
+            <div class="assetGrid" id="assetGrid"></div>
+            <div class="hint">Tip: tap an image to preview or delete it.</div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewClients" data-view="clients">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Clients & Team</div>
+                <div class="cardSub">VIP collaboration workspace with members, meetings, chat flow, and media-ready upgrades</div>
+              </div>
+              <button class="btn btnSoft" id="newClient" type="button">New Client</button>
+            </div>
+
+            <div class="list" id="clientsList"></div>
+          </div>
+
+          <div class="featureGrid">
+            <article class="featureCard">
+              <div class="featureTitle">Account-by-account chat</div>
+              <div class="featureText">Each member or client can have their own entry point, room access, and workspace visibility.</div>
+            </article>
+            <article class="featureCard">
+              <div class="featureTitle">Meetings and calls</div>
+              <div class="featureText">UI-ready flow for meetings, voice call, video call, and group-chat style collaboration.</div>
+            </article>
+            <article class="featureCard">
+              <div class="featureTitle">Media and reactions</div>
+              <div class="featureText">Prepared direction for photo/video upload, recording, send-to-anyone, undo delete, and emoji reactions.</div>
+            </article>
+            <article class="featureCard">
+              <div class="featureTitle">Contact dashboard</div>
+              <div class="featureText">Per-user dashboard setup, contact name handling, and client workspace overview.</div>
+            </article>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewBackup" data-view="backup">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Backup</div>
+                <div class="cardSub">Export or import JSON including assets and clients</div>
+              </div>
+            </div>
+
+            <div class="backupBox">
+              <div class="backupRow">
+                <button class="btn btnPrimary" id="exportBtn" type="button">Export Backup</button>
+                <div class="muted">Creates a JSON file. Size may grow when many images are included.</div>
+              </div>
+
+              <div class="divider"></div>
+
+              <div class="backupRow">
+                <label class="btn btnSoft fileBtn">
+                  Import Backup
+                  <input id="importFile" type="file" accept="application/json" />
+                </label>
+                <button class="btn btnDanger" id="wipeBtn" type="button">Wipe Data</button>
+              </div>
+
+              <div class="notice" id="backupStatus"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewAbout" data-view="about">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">More</div>
+                <div class="cardSub">Brand, memberships, premium feature notes, language setup, and product details</div>
+              </div>
+            </div>
+
+            <div class="infoGrid">
+              <article class="infoCard">
+                <div class="infoTitle">SMMT overview</div>
+                <p class="infoText">SMMT means `SOCIAL MEDIA MANAGER TOOLS`, a cleaner and more pro-looking workspace for planning, editing, saving, and managing social media operations in one app.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Full app name</div>
+                <p class="infoText">The public-facing product name is `SOCIAL MEDIA MANAGER TOOLS` while the short in-app brand is `SMMT`.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Features</div>
+                <ul class="listPlain">
+                  <li>per-user dashboard</li>
+                  <li>post / library workflow</li>
+                  <li>idea bank</li>
+                  <li>asset uploads</li>
+                  <li>AI Assistant</li>
+                  <li>clients &amp; team workspace</li>
+                  <li>VIP membership locking</li>
+                </ul>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">VIP locked tools</div>
+                <p class="infoText">If VIP is not active, these premium tools should stay locked: `AI Assistant`, `Calendar`, and `Clients &amp; Team`.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">VIP membership pricing</div>
+                <p class="infoText">VIP pricing is now set to `$3 / month`, `$27 / year`, and `$70 lifetime`.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Payment direction</div>
+                <p class="infoText">The upgrade flow is now positioned for direct membership payment, with PayMongo as the next payment gateway stage.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Client &amp; team upgrade</div>
+                <ul class="listPlain">
+                  <li>meeting rooms</li>
+                  <li>chat account by account</li>
+                  <li>voice and video calls</li>
+                  <li>upload photos and videos</li>
+                  <li>record, send, undo, emoji</li>
+                </ul>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Language support</div>
+                <p class="infoText">The app now includes broader language selection so the interface direction can follow the user’s country or preferred language more closely.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Terms of service</div>
+                <p class="infoText">Use the app responsibly, keep your account secure, and avoid uploading illegal or harmful content. Direct membership billing terms can be finalized once the payment gateway is switched to PayMongo.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Privacy policy</div>
+                <p class="infoText">Basic account and workspace data are used only to operate the app experience. Collaboration privacy details for chat, calls, and uploads can be added in the next backend phase.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Missing gaps covered</div>
+                <p class="infoText">This update also adds stronger naming consistency, premium locking rules, cleaner styling direction, and clearer separation between free tools and VIP tools.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Final direction</div>
+                <p class="infoText">The app is now closer to a pro product look, with the remaining big backend step centered on live collaboration and PayMongo checkout.</p>
+              </article>
+              <article class="infoCard">
+                <div class="infoTitle">Creator</div>
+                <div class="creatorRow">
+                  <div class="miniIcon" aria-hidden="true">👨</div>
+                  <div>
+                    <div class="infoText"><strong>John Lloyd Biendima</strong></div>
+                    <div class="muted">Human male icon</div>
+                  </div>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Contact & Brand</div>
+                <div class="cardSub">Edit your app identity, support details, and public-facing SMMT information</div>
+              </div>
+            </div>
+
+            <div class="formGrid">
+              <div class="fieldBlock">
+                  <div class="label">App / Brand Name</div>
+                  <input class="input" id="aboutAppName" placeholder="Example: SMMT" />
+              </div>
+
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Support Email</div>
+                  <input class="input" id="aboutSupportEmail" type="email" placeholder="your@email.com" />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">Support Number</div>
+                  <input class="input" id="aboutSupportPhone" placeholder="09xxxxxxxxx" />
+                </div>
+              </div>
+
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Facebook Link</div>
+                  <input class="input" id="aboutFacebook" placeholder="https://facebook.com/..." />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">Instagram Link</div>
+                  <input class="input" id="aboutInstagram" placeholder="https://instagram.com/..." />
+                </div>
+              </div>
+
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">TikTok Link</div>
+                  <input class="input" id="aboutTiktok" placeholder="https://tiktok.com/@..." />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">WhatsApp / Messenger Link</div>
+                  <input class="input" id="aboutWhatsapp" placeholder="https://wa.me/... or Messenger link" />
+                </div>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">About / Notes</div>
+                <textarea class="textarea" id="aboutNote" placeholder="Short product intro, support hours, or rollout notes..."></textarea>
+              </div>
+
+              <div class="actionsRow">
+                <button class="btn btnPrimary" id="saveAboutBtn" type="button">Save Contact</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Brand Setup</div>
+                <div class="cardSub">Define brand voice, audience, and output direction for SOCIAL MEDIA MANAGER TOOLS</div>
+              </div>
+            </div>
+
+            <div class="formGrid">
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Brand Name</div>
+                  <input class="input" id="dnaBrandName" placeholder="Example: SOCIAL MEDIA MANAGER TOOLS" />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">Target Audience</div>
+                  <input class="input" id="dnaAudience" placeholder="Example: creators, agencies, small business owners" />
+                </div>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">Mission</div>
+                <textarea class="textarea" id="dnaMission" placeholder="What is the mission of the brand?"></textarea>
+              </div>
+
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Tone of Voice</div>
+                  <input class="input" id="dnaTone" placeholder="Example: direct, clean, confident" />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">Content Style</div>
+                  <input class="input" id="dnaContentStyle" placeholder="Example: minimalist, helpful, search-friendly" />
+                </div>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">Goals</div>
+                <textarea class="textarea" id="dnaGoals" placeholder="Leads, inquiries, engagement, conversions..."></textarea>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">Constraints</div>
+                <textarea class="textarea" id="dnaConstraints" placeholder="What should the app avoid in wording, style, or messaging?"></textarea>
+              </div>
+
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Offers / Services</div>
+                  <input class="input" id="dnaOffers" placeholder="Example: SMM, post planning, content systems" />
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">CTA Style</div>
+                  <input class="input" id="dnaCtaStyle" placeholder="Example: soft CTA, direct CTA, book now" />
+                </div>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">Preferred Output Language</div>
+                <input class="input" id="dnaPreferredLanguage" placeholder="Example: English, Filipino, Taglish, Arabic" />
+              </div>
+
+              <div class="actionsRow">
+                <button class="btn btnPrimary" id="saveDnaBtn" type="button">Save Brand Setup</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Preferences</div>
+                <div class="cardSub">Theme, wider language selection, and VIP membership status all live here</div>
+              </div>
+            </div>
+
+            <div class="formGrid">
+              <div class="formRow2">
+                <div class="fieldBlock">
+                  <div class="label">Theme</div>
+                  <select class="select" id="prefTheme">
+                    <option value="dark">Dark</option>
+                    <option value="light">Light</option>
+                    <option value="system">System</option>
+                  </select>
+                </div>
+                <div class="fieldBlock">
+                  <div class="label">App Language</div>
+                  <select class="select" id="prefAppLanguage">
+                    <option value="auto">Auto by country</option>
+                    <option value="english">English</option>
+                    <option value="filipino">Filipino</option>
+                    <option value="taglish">Taglish</option>
+                    <option value="spanish">Español</option>
+                    <option value="portuguese">Português</option>
+                    <option value="french">Français</option>
+                    <option value="german">Deutsch</option>
+                    <option value="arabic">العربية</option>
+                    <option value="hindi">हिन्दी</option>
+                    <option value="indonesian">Bahasa Indonesia</option>
+                    <option value="thai">ไทย</option>
+                    <option value="vietnamese">Tiếng Việt</option>
+                    <option value="japanese">日本語</option>
+                    <option value="korean">한국어</option>
+                    <option value="chinese">中文</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="fieldBlock">
+                <div class="label">Content Language</div>
+                <input class="input" id="prefContentLanguage" placeholder="Type any language you want the content output to follow" />
+              </div>
+
+              <div class="notice" id="aboutMembershipStatus"></div>
+
+              <div class="actionsRow">
+                <button class="btn btnSoft" id="aboutUpgradeBtn" type="button">Membership</button>
+                <button class="btn btnPrimary" id="savePrefsBtn" type="button">Save Preferences</button>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view hidden" id="viewTutorial" data-view="tutorial">
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Beginner tutorial</div>
+                <div class="cardSub">Start here if you are new to social media management</div>
+              </div>
+              <button class="btn btnSoft" id="tutorialCreateTask" type="button">Create Starter Task</button>
+            </div>
+            <div class="infoGrid" id="tutorialSteps"></div>
+          </div>
+
+          <div class="card">
+            <div class="cardHeader">
+              <div>
+                <div class="cardTitle">Beginner checklist</div>
+                <div class="cardSub">Simple path from first client to organized SMM workflow</div>
+              </div>
+            </div>
+            <div class="list" id="tutorialChecklist"></div>
+          </div>
+        </section>
+      </main>
+
+      <nav class="bottomNav">
+        <button class="navItem active" data-nav="dashboard" type="button">
+          <div class="navIco" aria-hidden="true">⌂</div>
+          <div class="navLbl" id="navLblHome">Home</div>
+        </button>
+        <button class="navItem" data-nav="organize" type="button">
+          <div class="navIco" aria-hidden="true">☰</div>
+          <div class="navLbl" id="navLblOrganize">Organize</div>
+        </button>
+        <button class="navItem" data-nav="notes" type="button">
+          <div class="navIco" aria-hidden="true">☷</div>
+          <div class="navLbl" id="navLblNotes">Notes</div>
+        </button>
+        <button class="navItem" data-nav="docs" type="button">
+          <div class="navIco" aria-hidden="true">🗎</div>
+          <div class="navLbl" id="navLblDocs">Docs</div>
+        </button>
+        <button class="navItem" data-nav="calendar" type="button">
+          <div class="navIco" aria-hidden="true">◫</div>
+          <div class="navLbl" id="navLblCalendar">Calendar</div>
+        </button>
+        <button class="navItem" data-nav="posts" type="button">
+          <div class="navIco" aria-hidden="true">✎</div>
+          <div class="navLbl" id="navLblPosts">Posts</div>
+        </button>
+        <button class="navItem" data-nav="ideas" type="button">
+          <div class="navIco" aria-hidden="true">✦</div>
+          <div class="navLbl" id="navLblIdeas">Ideas</div>
+        </button>
+        <button class="navItem" data-nav="assets" type="button">
+          <div class="navIco" aria-hidden="true">▣</div>
+          <div class="navLbl" id="navLblAssets">Assets</div>
+        </button>
+        <button class="navItem" data-nav="clients" type="button">
+          <div class="navIco" aria-hidden="true">◌</div>
+          <div class="navLbl" id="navLblClients">Clients</div>
+        </button>
+        <button class="navItem" data-nav="tutorial" type="button">
+          <div class="navIco" aria-hidden="true">? </div>
+          <div class="navLbl" id="navLblTutorial">Tutorial</div>
+        </button>
+        <button class="navItem" data-nav="about" type="button">
+          <div class="navIco" aria-hidden="true">⋯</div>
+          <div class="navLbl" id="navLblAbout">More</div>
+        </button>
+      </nav>
+
+      <div class="modalRoot hidden" id="modalRoot" aria-hidden="true">
+        <div class="modalOverlay" id="modalOverlay"></div>
+        <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modalTitle">
+          <div class="modalHeader">
+            <div class="modalTitle" id="modalTitle">Modal</div>
+            <button class="iconBtn" id="modalClose" type="button">Close</button>
+          </div>
+          <div class="modalBody" id="modalBody"></div>
+        </div>
+      </div>
+
+      <div class="toast hidden" id="toast"></div>
+
+      <button class="aiFab" id="aiFab" type="button" aria-label="AI Assistant">AI</button>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="supabase.js"></script>
+    <script src="script.js"></script>
+  </body>
+</html>
