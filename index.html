@@ -284,7 +284,10 @@
                 <div class="cardTitle">Clients & Team</div>
                 <div class="cardSub">VIP collaboration workspace with members, meetings, chat flow, and media-ready upgrades</div>
               </div>
-              <button class="btn btnSoft" id="newClient" type="button">New Client</button>
+              <div class="smallRow">
+                <button class="btn btnGhost" id="joinRoomBtn" type="button">Join Room</button>
+                <button class="btn btnSoft" id="newClient" type="button">New Client</button>
+              </div>
             </div>
 
             <div class="list" id="clientsList"></div>
@@ -695,6 +698,7 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script src="https://meet.jit.si/external_api.js"></script>
     <script src="supabase.js"></script>
     <script src="script.js"></script>
   </body>
