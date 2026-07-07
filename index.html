@@ -1,0 +1,310 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#16a34a" />
+  <title>MEET & GREET</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+</head>
+<body>
+
+  <!-- ===================== AUTH SCREEN ===================== -->
+  <div class="authWrap" id="authWrap">
+    <div class="authCard">
+      <div class="authLogo">
+        <div class="brandMark" style="width:52px;height:52px;border-radius:16px"></div>
+        <div class="brandTitle" style="font-size:22px">MEET &amp; GREET</div>
+        <div class="authTagline">Safe • Simple • All-in-one • Comfortable</div>
+      </div>
+
+      <div class="authTabs">
+        <div class="authTab active" id="tabLogin">Log In</div>
+        <div class="authTab" id="tabSignup">Sign Up</div>
+      </div>
+
+      <div id="authMsg"></div>
+
+      <!-- LOGIN FORM -->
+      <form id="formLogin">
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="loginEmail" required placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="loginPassword" required placeholder="••••••••" autocomplete="current-password" />
+        </div>
+        <button class="btn btnPrimary btnBlock" type="submit" id="btnDoLogin">Log In</button>
+      </form>
+
+      <!-- SIGNUP FORM -->
+      <form id="formSignup" class="hidden">
+        <div class="field">
+          <label>Full name</label>
+          <input type="text" id="signupName" required placeholder="Juan Dela Cruz" />
+        </div>
+        <div class="field">
+          <label>Email</label>
+          <input type="email" id="signupEmail" required placeholder="you@example.com" autocomplete="email" />
+        </div>
+        <div class="field">
+          <label>Password</label>
+          <input type="password" id="signupPassword" required minlength="6" placeholder="At least 6 characters" autocomplete="new-password" />
+        </div>
+        <button class="btn btnPrimary btnBlock" type="submit" id="btnDoSignup">Create Account</button>
+      </form>
+
+      <div class="authNote">
+        MEET &amp; GREET uses email &amp; password only — no Google, Facebook, or social login.
+        Your data is encrypted and never sold or shared.
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== MAIN APP ===================== -->
+  <div class="app hidden" id="app">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brandMark"></div>
+        <div>
+          <div class="brandTitle">MEET &amp; GREET</div>
+          <div class="brandSub">Safe • Simple • All-in-one</div>
+        </div>
+      </div>
+      <nav class="navTabs" id="navTabs">
+        <button class="navTab active" data-view="dashboard">Dashboard</button>
+        <button class="navTab" data-view="meetings">Meetings</button>
+        <button class="navTab" data-view="chat">Chat</button>
+        <button class="navTab" data-view="whiteboard">Whiteboard</button>
+        <button class="navTab" data-view="profile">Profile</button>
+      </nav>
+      <div class="topActions">
+        <span class="badge" id="planBadge">Free</span>
+        <button class="btn btnGhost btnSm" id="btnLogout">Log out</button>
+      </div>
+    </header>
+
+    <main class="main">
+
+      <!-- ---------- DASHBOARD ---------- -->
+      <section class="view active" id="viewDashboard">
+        <div class="grid2">
+          <div class="card">
+            <div class="cardTitle">Welcome back</div>
+            <div class="cardRow" style="margin-bottom:10px">
+              <div>
+                <div id="dashName" style="font-weight:700;font-family:var(--display);font-size:16px"></div>
+                <div class="itemMeta" id="dashEmail"></div>
+              </div>
+              <span class="badge" id="dashPlanBadge">Free</span>
+            </div>
+            <div class="metricRow">
+              <div class="metric"><div class="metricNum" id="mUpcoming">0</div><div class="metricLbl">upcoming meetings</div></div>
+              <div class="metric"><div class="metricNum" id="mHistory">0</div><div class="metricLbl">past meetings</div></div>
+            </div>
+            <div style="margin-top:10px">
+              <div class="itemMeta">Storage used</div>
+              <div class="storageBarOuter"><div class="storageBarInner" id="storageBar" style="width:0%"></div></div>
+              <div class="itemMeta" id="storageLabel" style="margin-top:4px"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="cardTitle">Quick actions</div>
+            <div style="display:flex;flex-direction:column;gap:10px">
+              <button class="btn btnPrimary btnBlock" id="qaInstant">Start Instant Meeting</button>
+              <button class="btn btnGhost btnBlock" id="qaSchedule">Schedule a Meeting</button>
+              <button class="btn btnGhost btnBlock" id="qaChat">Open Chat</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Upcoming meetings</div>
+          <div class="list" id="dashUpcomingList"><div class="emptyState">No upcoming meetings yet.</div></div>
+        </div>
+      </section>
+
+      <!-- ---------- MEETINGS ---------- -->
+      <section class="view" id="viewMeetings">
+        <div class="card">
+          <div class="cardRow">
+            <div class="cardTitle" style="margin:0">Schedule a meeting</div>
+          </div>
+          <form id="formSchedule">
+            <div class="field"><label>Title</label><input type="text" id="mTitle" required placeholder="Weekly team sync" /></div>
+            <div class="fieldRow">
+              <div class="field"><label>Date</label><input type="date" id="mDate" required /></div>
+              <div class="field"><label>Time</label><input type="time" id="mTime" required /></div>
+            </div>
+            <div class="fieldRow">
+              <div class="field"><label>Duration (minutes)</label><input type="number" id="mDuration" value="40" min="5" max="600" required /></div>
+              <div class="field"><label>Time zone</label>
+                <select id="mTimezone"></select>
+              </div>
+            </div>
+            <div class="field"><label>Invite participants (emails, comma separated)</label><input type="text" id="mInvites" placeholder="ana@company.com, ben@company.com" /></div>
+            <div class="field"><label>Passcode (optional)</label><input type="text" id="mPasscode" placeholder="Leave blank for none" /></div>
+            <button class="btn btnPrimary btnBlock" type="submit">Schedule Meeting</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Your meetings</div>
+          <div class="list" id="meetingsList"><div class="emptyState">No meetings yet — schedule one above or start an instant meeting from the Dashboard.</div></div>
+        </div>
+      </section>
+
+      <!-- ---------- CHAT ---------- -->
+      <section class="view" id="viewChat">
+        <div class="card">
+          <div class="cardRow">
+            <div class="cardTitle" style="margin:0">Team Chat</div>
+            <button class="btn btnGhost btnSm" id="btnNewChat">+ New chat</button>
+          </div>
+          <div class="chatLayout">
+            <div class="chatThreads" id="chatThreads"><div class="emptyState">No conversations yet.</div></div>
+            <div class="chatMain">
+              <div class="chatMessages" id="chatMessages"><div class="emptyState">Select a conversation to start chatting.</div></div>
+              <div class="chatComposer">
+                <input type="text" id="chatInput" placeholder="Type a message…" disabled />
+                <button class="btn btnPrimary" id="chatSend" disabled>Send</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ---------- WHITEBOARD ---------- -->
+      <section class="view" id="viewWhiteboard">
+        <div class="card" id="wbPickerCard">
+          <div class="cardTitle">Whiteboard</div>
+          <div class="itemMeta" style="margin-bottom:8px">Each meeting has its own shared whiteboard. Pick a meeting to open it.</div>
+          <div class="list" id="wbMeetingPickerList"><div class="emptyState">No meetings yet — schedule one first.</div></div>
+        </div>
+
+        <div class="card hidden" id="wbBoardCard">
+          <div class="cardRow">
+            <div class="cardTitle" style="margin:0" id="wbMeetingLabel">Whiteboard</div>
+            <button class="btn btnGhost btnSm" id="wbBack">&laquo; Back</button>
+          </div>
+          <div class="wbToolbar">
+            <button class="btn btnGhost btnSm wbColorBtn active" data-color="#0f2419">Black</button>
+            <button class="btn btnGhost btnSm wbColorBtn" data-color="#16a34a">Green</button>
+            <button class="btn btnGhost btnSm wbColorBtn" data-color="#e0483e">Red</button>
+            <button class="btn btnGhost btnSm wbColorBtn" data-color="#f59e0b">Amber</button>
+            <button class="btn btnGhost btnSm" id="wbAddSticky">+ Sticky note</button>
+            <button class="btn btnDanger btnSm" id="wbClear">Clear board</button>
+          </div>
+          <div class="wbCanvasWrap" id="wbCanvasWrap">
+            <canvas id="wbCanvas"></canvas>
+          </div>
+          <div class="lockNote">Synced in real time with everyone in this meeting.</div>
+        </div>
+      </section>
+      <!-- ---------- PROFILE ---------- -->
+      <section class="view" id="viewProfile">
+        <div class="grid2">
+          <div class="card">
+            <div class="cardTitle">Your profile</div>
+            <div class="field"><label>Full name</label><input type="text" id="pName" /></div>
+            <div class="field"><label>Bio</label><textarea id="pBio" rows="3" placeholder="A short bio…"></textarea></div>
+            <div class="field"><label>Avatar URL</label><input type="text" id="pAvatar" placeholder="https://…" /></div>
+            <div class="fieldRow">
+              <div class="field"><label>Time zone</label><select id="pTimezone"></select></div>
+              <div class="field"><label>Language</label>
+                <select id="pLanguage">
+                  <option value="en">English</option>
+                  <option value="fil">Filipino</option>
+                  <option value="es">Español</option>
+                  <option value="ja">日本語</option>
+                </select>
+              </div>
+            </div>
+            <div class="field"><label>Email (read-only)</label><input type="text" id="pEmail" disabled /></div>
+            <button class="btn btnPrimary btnBlock" id="btnSaveProfile">Save Profile</button>
+          </div>
+
+          <div class="card">
+            <div class="cardTitle">Account &amp; security</div>
+            <div class="cardRow" style="margin-bottom:12px">
+              <span>Membership</span>
+              <span class="badge" id="profilePlanBadge">Free</span>
+            </div>
+            <div class="field"><label>New password</label><input type="password" id="pNewPassword" placeholder="At least 6 characters" /></div>
+            <button class="btn btnGhost btnBlock" id="btnChangePassword">Change Password</button>
+
+            <div class="cardTitle" style="margin-top:20px">Notifications</div>
+            <div class="switchRow">
+              <span>In-app pop-up alerts</span>
+              <label class="switch"><input type="checkbox" id="notifInApp" checked><span class="slider"></span></label>
+            </div>
+            <div class="switchRow">
+              <span>Email reminders (15 min / 5 min / start)</span>
+              <label class="switch"><input type="checkbox" id="notifEmail" checked><span class="slider"></span></label>
+            </div>
+
+            <div class="cardTitle" style="margin-top:20px">Danger zone</div>
+            <button class="btn btnDanger btnBlock" id="btnDeleteAccount">Delete my account</button>
+          </div>
+        </div>
+
+        <div class="card" id="membershipCard">
+          <div class="cardTitle">Membership</div>
+          <div class="cardRow" style="margin-bottom:6px">
+            <span>Current status</span>
+            <span class="badge" id="membershipStatusBadge">Free</span>
+          </div>
+          <div class="itemMeta" id="membershipStatusDetail" style="margin-bottom:16px"></div>
+          <div class="planGrid" id="planGrid"></div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">AI Companion <span class="badge badgeVip">VIP</span></div>
+          <div class="comingSoon hidden" id="aiCompanionLocked">
+            Automatic meeting notes, summaries, and chat recaps are a VIP Verified feature. Upgrade to VIP to unlock this for all your meetings and chats.
+          </div>
+          <div class="hidden" id="aiCompanionUnlocked">
+            <div class="field">
+              <label>Choose a meeting or chat</label>
+              <select id="aiRoomSelect"></select>
+            </div>
+            <button class="btn btnPrimary btnBlock" id="btnAiGenerate">✨ Generate Summary</button>
+            <div class="aiOutputBox hidden" id="aiOutputBox"></div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="cardTitle">Phone / Voice calls</div>
+          <div class="comingSoon">In-app voice calling, call history, and voicemail are coming in a future update.</div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- ===================== CALL / MEETING MODAL (Zoom-style full screen) ===================== -->
+  <div class="callFrameWrap hidden" id="callFrameWrap">
+    <div class="callTopBar">
+      <span class="callTitle" id="callTitleText">Meeting</span>
+      <button class="callLeaveBtn" id="btnLeaveCall">Leave</button>
+    </div>
+    <iframe class="callFrame" id="callIframe" allow="camera; microphone; fullscreen; display-capture; autoplay"></iframe>
+  </div>
+
+  <!-- Generic modal -->
+  <div class="modalOverlay hidden" id="modalOverlay">
+    <div class="modalCard" id="modalCard"></div>
+  </div>
+
+  <div class="toast hidden" id="toast"></div>
+
+  <script src="supabase.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
