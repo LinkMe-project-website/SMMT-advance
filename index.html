@@ -182,10 +182,19 @@
 
         <div class="card">
           <div class="cardTitle">Quick actions</div>
-          <div style="display:flex;flex-direction:column;gap:10px">
-            <button class="btn btnPrimary btnBlock" id="qaInstant">🎥 Start Instant Meeting</button>
-            <button class="btn btnGhost btnBlock" id="qaSchedule">📅 Schedule Meeting</button>
-            <button class="btn btnGhost btnBlock" id="qaRecordings">🎬 My Recordings</button>
+          <div class="qaGrid">
+            <button class="qaTile" id="qaInstant">
+              <span class="qaTileIcon">🎥</span>
+              <span class="qaTileLabel">Start Instant Meeting</span>
+            </button>
+            <button class="qaTile" id="qaSchedule">
+              <span class="qaTileIcon">📅</span>
+              <span class="qaTileLabel">Schedule Meeting</span>
+            </button>
+            <button class="qaTile" id="qaRecordings">
+              <span class="qaTileIcon">🎬</span>
+              <span class="qaTileLabel">My Recordings</span>
+            </button>
           </div>
         </div>
 
