@@ -736,3 +736,44 @@ input:checked + .slider:before{transform:translateX(18px)}
 
 /* ===== NEWEST MEMBER ITEM ===== */
 .newestMemberItem{padding:12px 14px;background:var(--panel2);border-radius:12px;font-size:13px;color:var(--text)}
+/* ===== VORTEXIA HERO SLIDER ===== */
+
+.heroSlider{
+  display:flex;
+  gap:16px;
+  overflow-x:auto;
+  scroll-snap-type:x mandatory;
+  -webkit-overflow-scrolling:touch;
+  padding:4px 2px 12px;
+}
+
+.heroSlider::-webkit-scrollbar{
+  display:none;
+}
+
+.heroCard{
+  flex:0 0 100%;
+  scroll-snap-align:start;
+  background:var(--panel2);
+  border:1px solid var(--border);
+  border-radius:20px;
+  padding:22px;
+  box-sizing:border-box;
+}
+
+.heroIcon{
+  font-size:34px;
+  margin-bottom:12px;
+}
+
+.heroTitle{
+  font-size:20px;
+  font-weight:700;
+  margin-bottom:8px;
+}
+
+.heroText{
+  font-size:14px;
+  color:var(--muted);
+  line-height:1.5;
+}
