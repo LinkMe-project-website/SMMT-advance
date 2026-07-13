@@ -245,8 +245,10 @@ async function onLoggedIn(user) {
   populateTimezones($("pTimezone"));
   startPresenceHeartbeat();
   await loadPlans();
+  await loadCommunityRoles();
   await loadProfile();
   await loadMeetings();
+  await loadDashboardFeed();
   await loadChatThreads();
   renderActiveStatusBar();
   await loadCallHistory();
@@ -298,18 +300,20 @@ bootstrapSession();
 // ---------------------------------------------------------------------------
 // Navigation
 // ---------------------------------------------------------------------------
-const VIEW_TITLES = { dashboard: "Home", meetings: "Meetings", chat: "Chats", recordings: "Recordings", notifications: "Notifications", whiteboard: "Whiteboard", profile: "Profile", more: "Community" };
+const VIEW_TITLES = { dashboard: "Home", meetings: "Meetings", chat: "Chats", recordings: "Recordings", notifications: "Notifications", whiteboard: "Whiteboard", profile: "Profile", more: "Community", vip: "VIP Membership", workspace: "Workspace" };
 
 function setActiveView(view) {
   document.querySelectorAll(".navTab").forEach(b => b.classList.toggle("active", b.dataset.view === view));
   document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
   $("view" + view.charAt(0).toUpperCase() + view.slice(1)).classList.add("active");
   $("pageTitle").textContent = VIEW_TITLES[view] || view;
-  if (view === "profile") $("pageSubtitle").textContent = "Account & settings";
+  if (view === "profile") { $("pageSubtitle").textContent = "Account & settings"; loadMyPosts(); loadTimeline(); }
+  else if (view === "vip") $("pageSubtitle").textContent = "Plans, benefits & payment";
+  else if (view === "workspace") { $("pageSubtitle").textContent = "Your videos & creative feed"; loadWorkspace(); }
   else if (view === "notifications") { $("pageSubtitle").textContent = ""; loadNotifications(); }
   else if (view === "recordings") { $("pageSubtitle").textContent = ""; renderRecordingsList(); }
-  else if (view === "dashboard") { $("pageSubtitle").textContent = ""; loadFeed(); }
-  else if (view === "more") { $("pageSubtitle").textContent = "Marketplace, forum & announcements"; loadFeed(); loadJobs(); loadForum(); loadCommunityStats(); }
+  else if (view === "dashboard") { $("pageSubtitle").textContent = ""; loadDashboardFeed(); }
+  else if (view === "more") { $("pageSubtitle").textContent = "Marketplace, forum & announcements"; loadFeed(); loadMarketplace(); loadForum(); loadCommunityStats(); }
   else $("pageSubtitle").textContent = "";
   if (view === "whiteboard" && !wbRoomId) renderWhiteboardPicker();
 }
@@ -321,6 +325,8 @@ document.getElementById("navTabs").addEventListener("click", (e) => {
 });
 
 $("btnProfileTop").addEventListener("click", () => setActiveView("profile"));
+$("btnVipTop").addEventListener("click", () => setActiveView("vip"));
+$("planBadge").addEventListener("click", () => setActiveView("vip"));
 
 $("btnSettingsTop").addEventListener("click", () => {
   setActiveView("profile");
@@ -341,6 +347,7 @@ $("qaRecordings").addEventListener("click", () => setActiveView("recordings"));
 $("qaInstant").addEventListener("click", startInstantMeeting);
 $("backFromMeetings").addEventListener("click", () => setActiveView("dashboard"));
 $("backFromRecordings").addEventListener("click", () => setActiveView("dashboard"));
+$("backFromVip").addEventListener("click", () => setActiveView("profile"));
 
 // ---------------------------------------------------------------------------
 // Profile
@@ -362,18 +369,60 @@ function renderProfile() {
   $("dashAvatarInitial").textContent = initials || "🙂";
   $("pName").value = p.full_name || "";
   $("pBio").value = p.bio || "";
-  $("pAvatar").value = p.avatar_url || "";
   $("pEmail").value = p.email || "";
+  $("pContact").value = p.contact_info || "";
   $("pTimezone").value = p.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone;
   $("pLanguage").value = p.language || "en";
+  editingSkills = [...(p.skills || [])];
+  renderSkillsEditor();
 
   [ "planBadge", "dashPlanBadge", "profilePlanBadge" ].forEach(id => {
     const el = $(id);
     el.textContent = isVip ? "👑 VIP Verified" : "Free";
     el.className = "badge " + (isVip ? "badgeVip" : "badgeFree");
   });
+  $("profilePlanBadge").classList.remove("hidden");
+
+  // Profile header: name, bio, avatar, cover, role badge
+  $("profileHeaderName").innerHTML = renderVipName(p.full_name, p);
+  $("profileHeaderBio").textContent = p.bio || "";
+  const repBadgeEl = $("profileRepBadge");
+  if (repBadgeEl) { repBadgeEl.innerHTML = renderReputationBadge(p.reputation_tier); repBadgeEl.classList.remove("hidden"); }
+  const skillsRowEl = $("profileSkillsRow");
+  if (skillsRowEl) skillsRowEl.innerHTML = renderSkillChips(p.skills, false);
+  updateProfileCompleteness(p);
+  if (p.avatar_url) {
+    $("profileAvatarImg").src = p.avatar_url;
+    $("profileAvatarImg").classList.remove("hidden");
+    $("profileAvatarBig").classList.add("hidden");
+  } else {
+    $("profileAvatarImg").classList.add("hidden");
+    $("profileAvatarBig").classList.remove("hidden");
+    $("profileAvatarBig").textContent = initials || "🙂";
+  }
+  if (p.cover_photo_url) {
+    $("profileCoverImg").src = p.cover_photo_url;
+    $("profileCoverImg").classList.remove("hidden");
+    $("profileCoverPlaceholder").classList.add("hidden");
+  } else {
+    $("profileCoverImg").classList.add("hidden");
+    $("profileCoverPlaceholder").classList.remove("hidden");
+  }
+  const myRole = (p.role === "founder") ? "founder" : getUserRoleLabel(p.id);
+  const roleBadgeHtml = getRoleBadgeHtml(myRole);
+  $("profileRoleBadge").innerHTML = roleBadgeHtml;
+  $("profileRoleBadge").classList.toggle("hidden", !roleBadgeHtml);
+
+  loadFollowStats();
 
   renderAiCompanion(isVip);
+  const mDurationEl = $("mDuration"), mDurationHintEl = $("mDurationHint");
+  if (mDurationEl && mDurationHintEl) {
+    mDurationEl.max = isVip ? 600 : 40;
+    mDurationHintEl.textContent = isVip
+      ? "👑 VIP: no meeting length limit."
+      : "Free plan: capped at 40 minutes. Upgrade to VIP for unlimited meetings.";
+  }
   renderMembershipSection(membership);
 
   const quotaBytes = isVip ? null : 1024 * 1024 * 1024; // 1GB free tier
@@ -389,19 +438,359 @@ function renderProfile() {
   }
 }
 
+function updateProfileCompleteness(p) {
+  const bar = $("profileCompletenessBar"), label = $("profileCompletenessLabel");
+  if (!bar || !label) return;
+  const checks = [p.full_name, p.bio, p.avatar_url, p.cover_photo_url, p.contact_info, (p.skills && p.skills.length)];
+  const filled = checks.filter(Boolean).length;
+  const pct = Math.round((filled / checks.length) * 100);
+  bar.style.width = pct + "%";
+  label.textContent = pct >= 100 ? "Profile 100% complete 🎉" : `Profile ${pct}% complete — add ${!p.skills?.length ? "skills" : !p.contact_info ? "contact info" : "more details"} to reach ${Math.min(100, pct + 20)}%`;
+}
+
+let editingSkills = [];
+function renderSkillsEditor() {
+  const el = $("pSkillsChips");
+  if (!el) return;
+  el.innerHTML = renderSkillChips(editingSkills, true) || `<span class="itemMeta">No skills added yet.</span>`;
+  el.querySelectorAll("[data-remove-skill]").forEach(btn => {
+    btn.addEventListener("click", () => {
+      editingSkills = editingSkills.filter(s => s !== btn.dataset.removeSkill);
+      renderSkillsEditor();
+    });
+  });
+}
+if ($("btnAddSkill")) {
+  $("btnAddSkill").addEventListener("click", () => {
+    const input = $("pSkillInput");
+    const val = input.value.trim();
+    if (!val) return;
+    if (editingSkills.length >= 10) { showToast("Max 10 skills — remove one first."); return; }
+    if (editingSkills.some(s => s.toLowerCase() === val.toLowerCase())) { showToast("Already added."); input.value = ""; return; }
+    editingSkills.push(val);
+    input.value = "";
+    renderSkillsEditor();
+  });
+  $("pSkillInput").addEventListener("keydown", (e) => {
+    if (e.key === "Enter") { e.preventDefault(); $("btnAddSkill").click(); }
+  });
+}
+
 $("btnSaveProfile").addEventListener("click", async () => {
   const updates = {
     full_name: $("pName").value.trim(),
     bio: $("pBio").value.trim(),
-    avatar_url: $("pAvatar").value.trim(),
+    contact_info: $("pContact").value.trim(),
     timezone: $("pTimezone").value,
     language: $("pLanguage").value,
+    skills: editingSkills,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabaseClient.from("profiles").update(updates).eq("id", currentUser.id);
   if (error) { showToast("Could not save profile: " + error.message); return; }
+  await supabaseClient.rpc("recalc_reputation", { p_user_id: currentUser.id });
   showToast("Profile saved.");
   await loadProfile();
+});
+
+// ---------------------------------------------------------------------------
+// Profile: cover photo & avatar upload (Supabase Storage 'assets' bucket)
+// ---------------------------------------------------------------------------
+async function uploadProfileImage(file, kind) {
+  if (!file) return null;
+  if (!file.type.startsWith("image/")) { showToast("Please choose an image file."); return null; }
+  if (file.size > 25 * 1024 * 1024) { showToast("Image is too large (max 25MB)."); return null; }
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const path = `${currentUser.id}/${kind}/${Date.now()}.${ext}`;
+  const { error } = await supabaseClient.storage.from("assets").upload(path, file, { upsert: true });
+  if (error) { showToast("Upload failed: " + error.message); return null; }
+  const { data } = supabaseClient.storage.from("assets").getPublicUrl(path);
+  return data.publicUrl;
+}
+
+$("btnEditAvatar").addEventListener("click", () => $("avatarFileInput").click());
+$("btnEditCover").addEventListener("click", () => $("coverFileInput").click());
+
+$("avatarFileInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  showToast("Uploading avatar…");
+  const url = await uploadProfileImage(file, "avatar");
+  if (!url) return;
+  const { error } = await supabaseClient.from("profiles").update({ avatar_url: url }).eq("id", currentUser.id);
+  if (error) { showToast("Could not save avatar: " + error.message); return; }
+  showToast("Avatar updated!");
+  await loadProfile();
+});
+
+$("coverFileInput").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  showToast("Uploading cover photo…");
+  const url = await uploadProfileImage(file, "cover");
+  if (!url) return;
+  const { error } = await supabaseClient.from("profiles").update({ cover_photo_url: url }).eq("id", currentUser.id);
+  if (error) { showToast("Could not save cover photo: " + error.message); return; }
+  showToast("Cover photo updated!");
+  await loadProfile();
+});
+
+// ---------------------------------------------------------------------------
+// Profile: followers / following stats + lists
+// ---------------------------------------------------------------------------
+async function loadFollowStats() {
+  if (!currentUser) return;
+  const [{ count: followersCount }, { count: followingCount }] = await Promise.all([
+    supabaseClient.from("followers").select("id", { count: "exact", head: true }).eq("following_id", currentUser.id),
+    supabaseClient.from("followers").select("id", { count: "exact", head: true }).eq("follower_id", currentUser.id),
+  ]);
+  $("statFollowers").textContent = followersCount || 0;
+  $("statFollowing").textContent = followingCount || 0;
+}
+
+async function openFollowListModal(type) {
+  // type: 'followers' | 'following'
+  const filterCol = type === "followers" ? "following_id" : "follower_id";
+  const selectCol = type === "followers" ? "follower_id" : "following_id";
+  const title = type === "followers" ? "Followers" : "Following";
+
+  openModal(`<div class="modalTitle">${title}</div><div class="list" id="followListModalBody"><div class="emptyState">Loading…</div></div>
+    <div style="display:flex;justify-content:flex-end;margin-top:14px"><button class="btn btnGhost" id="modalCancel">Close</button></div>`);
+  $("modalCancel").addEventListener("click", closeModal);
+
+  const { data: links, error } = await supabaseClient.from("followers").select(selectCol).eq(filterCol, currentUser.id);
+  const body = $("followListModalBody");
+  if (error || !links || !links.length) {
+    body.innerHTML = `<div class="emptyState">No ${title.toLowerCase()} yet.</div>`;
+    return;
+  }
+  const ids = links.map(l => l[selectCol]);
+  const { data: profilesData } = await supabaseClient.from("profiles").select("id, full_name, avatar_url, role, is_online, plan, vip_status, vip_until, trial_ends_at").in("id", ids);
+  if (!profilesData || !profilesData.length) {
+    body.innerHTML = `<div class="emptyState">No ${title.toLowerCase()} yet.</div>`;
+    return;
+  }
+  body.innerHTML = profilesData.map(u => {
+    const initials = (u.full_name || "").trim().split(/\s+/).filter(Boolean).map(w => w[0]).slice(0, 2).join("").toUpperCase() || "🙂";
+    const avatarHtml = u.avatar_url
+      ? `<img src="${escapeHtml(u.avatar_url)}" style="width:38px;height:38px;border-radius:50%;object-fit:cover" />`
+      : `<div class="listAvatar">${initials}</div>`;
+    const roleLabel = u.role === "founder" ? "founder" : getUserRoleLabel(u.id);
+    return `<div class="listItem">
+      <div style="position:relative;flex-shrink:0">
+        ${avatarHtml}
+        <span class="onlineDot ${u.is_online ? "" : "hidden"}"></span>
+      </div>
+      <div style="flex:1;min-width:0">
+        <div class="itemTitle">${renderVipName(u.full_name, u)}</div>
+        <div class="itemMeta">${u.is_online ? "🟢 Online" : "Offline"}</div>
+        ${roleLabel ? getRoleBadgeHtml(roleLabel) : ""}
+      </div>
+    </div>`;
+  }).join("");
+}
+
+$("btnEditProfileToggle").addEventListener("click", () => {
+  const card = $("personalDetailsCard");
+  const opening = card.classList.contains("hidden");
+  card.classList.toggle("hidden");
+  if (opening) card.scrollIntoView({ behavior: "smooth", block: "start" });
+});
+
+$("btnShowFollowers").addEventListener("click", () => openFollowListModal("followers"));
+$("btnShowFollowing").addEventListener("click", () => openFollowListModal("following"));
+$("btnShowMyPosts").addEventListener("click", () => $("myPostsList")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+
+// ---------------------------------------------------------------------------
+// Profile: share / copy link
+// ---------------------------------------------------------------------------
+function getProfileShareUrl() {
+  const id = currentProfile?.mg_id || currentUser?.id || "";
+  return `${location.origin}${location.pathname}?profile=${encodeURIComponent(id)}`;
+}
+
+$("btnShareProfile").addEventListener("click", async () => {
+  const url = getProfileShareUrl();
+  if (navigator.share) {
+    try { await navigator.share({ title: "My VORTEXIA profile", url }); } catch (e) { /* user cancelled */ }
+  } else {
+    try { await navigator.clipboard.writeText(url); showToast("Profile link copied!"); }
+    catch (e) { showToast(url); }
+  }
+});
+
+$("btnCopyProfileLink").addEventListener("click", async () => {
+  const url = getProfileShareUrl();
+  try { await navigator.clipboard.writeText(url); showToast("Profile link copied!"); }
+  catch (e) { showToast(url); }
+});
+
+// ---------------------------------------------------------------------------
+// Profile: manage posts (marketplace + rumble)
+// ---------------------------------------------------------------------------
+let managePostsActiveTab = "marketplace";
+
+async function loadMyPosts(tab) {
+  if (tab) managePostsActiveTab = tab;
+  const list = $("myPostsList");
+  if (!list || !currentUser) return;
+  list.innerHTML = `<div class="emptyState">Loading…</div>`;
+
+  if (managePostsActiveTab === "marketplace") {
+    const { data, error } = await supabaseClient.from("marketplace_listings")
+      .select("*").eq("posted_by", currentUser.id).order("created_at", { ascending: false });
+    const total = (data || []).length;
+    $("statMyPosts").textContent = total + (await countMyRumblePosts());
+    if (error || !data || !data.length) { list.innerHTML = `<div class="emptyState">No marketplace listings yet.</div>`; return; }
+    list.innerHTML = data.map(l => `
+      <div class="listItem">
+        <div style="flex:1;min-width:0">
+          <div class="itemTitle">${escapeHtml(l.title)}</div>
+          <div class="itemMeta">${l.price != null ? "₱" + Number(l.price).toLocaleString() : ""} • ${escapeHtml(l.status || "open")} • ${fmtDate(l.created_at)}</div>
+        </div>
+        <button class="btn btnGhost btnSm btnDanger" data-del-mk="${l.id}">Delete</button>
+      </div>`).join("");
+    list.querySelectorAll("[data-del-mk]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this listing?")) return;
+        await supabaseClient.from("marketplace_listings").delete().eq("id", btn.dataset.delMk);
+        showToast("Listing deleted.");
+        loadMyPosts();
+      });
+    });
+  } else {
+    const { data, error } = await supabaseClient.from("forum_posts")
+      .select("*").eq("author_id", currentUser.id).order("created_at", { ascending: false });
+    const total = (data || []).length;
+    $("statMyPosts").textContent = (await countMyMarketplacePosts()) + total;
+    if (error || !data || !data.length) { list.innerHTML = `<div class="emptyState">No Rumble threads yet.</div>`; return; }
+    list.innerHTML = data.map(t => `
+      <div class="listItem">
+        <div style="flex:1;min-width:0">
+          <div class="itemTitle">${escapeHtml(t.title)}</div>
+          <div class="itemMeta">❤️ ${t.likes_count || 0} • 💬 ${t.reply_count || 0} • ${fmtDate(t.created_at)}</div>
+        </div>
+        <button class="btn btnGhost btnSm btnDanger" data-del-rb="${t.id}">Delete</button>
+      </div>`).join("");
+    list.querySelectorAll("[data-del-rb]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        if (!confirm("Delete this thread?")) return;
+        await supabaseClient.from("forum_posts").delete().eq("id", btn.dataset.delRb);
+        showToast("Thread deleted.");
+        loadMyPosts();
+      });
+    });
+  }
+}
+
+async function countMyMarketplacePosts() {
+  const { count } = await supabaseClient.from("marketplace_listings").select("id", { count: "exact", head: true }).eq("posted_by", currentUser.id);
+  return count || 0;
+}
+async function countMyRumblePosts() {
+  const { count } = await supabaseClient.from("forum_posts").select("id", { count: "exact", head: true }).eq("author_id", currentUser.id);
+  return count || 0;
+}
+
+// ---------------------------------------------------------------------------
+// Profile: Timeline (Posts / Photos / Videos / Memories) — Facebook-style
+// ---------------------------------------------------------------------------
+let timelineActiveTab = "posts";
+let timelineMkCache = [];
+
+async function loadTimeline(tab) {
+  if (tab) timelineActiveTab = tab;
+  const body = $("timelineBody");
+  if (!body || !currentUser) return;
+  body.innerHTML = `<div class="emptyState">Loading…</div>`;
+
+  if (timelineActiveTab === "posts") {
+    const [{ data: mkData }, { data: rbData }] = await Promise.all([
+      supabaseClient.from("marketplace_listings").select("*").eq("posted_by", currentUser.id).order("created_at", { ascending: false }),
+      supabaseClient.from("forum_posts").select("*").eq("author_id", currentUser.id).order("created_at", { ascending: false }),
+    ]);
+    timelineMkCache = mkData || [];
+    const combined = [
+      ...(mkData || []).map(l => ({ ...l, _type: "marketplace" })),
+      ...(rbData || []).map(t => ({ ...t, _type: "rumble" })),
+    ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+
+    if (!combined.length) { body.innerHTML = `<div class="emptyState">No posts yet. Share something in Marketplace or Rumble!</div>`; return; }
+
+    body.innerHTML = combined.map(post => {
+      if (post._type === "rumble") {
+        return `
+          <div class="timelineCard">
+            <div class="timelineCardHead">🔥 Rumble • ${fmtDate(post.created_at)}</div>
+            <div class="itemTitle">${escapeHtml(post.title)}</div>
+            <div class="itemMeta" style="margin:4px 0 10px">${escapeHtml((post.body || "").slice(0, 160))}</div>
+            <div class="timelineActions">
+              <button class="timelineActionBtn" data-tl-like="${post.id}">👍 Like (${post.likes_count || 0})</button>
+              <button class="timelineActionBtn" data-tl-comment="${post.id}">💬 Comment (${post.reply_count || 0})</button>
+              <button class="timelineActionBtn" data-tl-share="1">↗️ Share</button>
+            </div>
+          </div>`;
+      }
+      return `
+        <div class="timelineCard">
+          <div class="timelineCardHead">🛍️ Marketplace • ${fmtDate(post.created_at)}</div>
+          <div class="itemTitle">${escapeHtml(post.title)}</div>
+          <div class="itemMeta" style="margin:4px 0 10px">${post.price != null ? "₱" + Number(post.price).toLocaleString() : ""} • ${escapeHtml(post.status || "open")}</div>
+          <div class="timelineActions">
+            <button class="timelineActionBtn" data-tl-view-mk="${post.id}">👁️ View</button>
+            <button class="timelineActionBtn" data-tl-share="1">↗️ Share</button>
+          </div>
+        </div>`;
+    }).join("");
+
+    body.querySelectorAll("[data-tl-like]").forEach(btn => btn.addEventListener("click", async () => { await likeThread(btn.dataset.tlLike); loadTimeline(); }));
+    body.querySelectorAll("[data-tl-comment]").forEach(btn => {
+      const post = (rbData || []).find(p => p.id === btn.dataset.tlComment);
+      if (post) btn.addEventListener("click", () => openThreadReplies(post.id, post));
+    });
+    body.querySelectorAll("[data-tl-view-mk]").forEach(btn => {
+      const listing = timelineMkCache.find(l => l.id === btn.dataset.tlViewMk);
+      if (listing) btn.addEventListener("click", () => openMarketplaceDetail(listing));
+    });
+    body.querySelectorAll("[data-tl-share]").forEach(btn => btn.addEventListener("click", async () => {
+      const url = getProfileShareUrl();
+      try { await navigator.clipboard.writeText(url); showToast("Link copied!"); }
+      catch (e) { showToast(url); }
+    }));
+
+  } else if (timelineActiveTab === "photos") {
+    const { data: mkData } = await supabaseClient.from("marketplace_listings").select("photos").eq("posted_by", currentUser.id);
+    const photos = [];
+    if (currentProfile?.cover_photo_url) photos.push(currentProfile.cover_photo_url);
+    if (currentProfile?.avatar_url) photos.push(currentProfile.avatar_url);
+    (mkData || []).forEach(l => (l.photos || []).forEach(p => { if (p) photos.push(p); }));
+    if (!photos.length) { body.innerHTML = `<div class="emptyState">No photos yet.</div>`; return; }
+    body.innerHTML = `<div class="timelinePhotoGrid">${photos.map(p => `<img src="${escapeHtml(p)}" class="timelinePhotoThumb" />`).join("")}</div>`;
+
+  } else if (timelineActiveTab === "videos") {
+    body.innerHTML = `<div class="emptyState">No videos yet — video posts are coming soon.</div>`;
+
+  } else {
+    body.innerHTML = `<div class="emptyState">Memories will appear here as your account grows — coming soon.</div>`;
+  }
+}
+
+$("timelineTabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".subTabBtn");
+  if (!btn) return;
+  $("timelineTabs").querySelectorAll(".subTabBtn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  loadTimeline(btn.dataset.tltab);
+});
+
+$("managePostsTabs").addEventListener("click", (e) => {
+  const btn = e.target.closest(".subTabBtn");
+  if (!btn) return;
+  $("managePostsTabs").querySelectorAll(".subTabBtn").forEach(b => b.classList.remove("active"));
+  btn.classList.add("active");
+  loadMyPosts(btn.dataset.mptab);
 });
 
 $("btnAccount").addEventListener("click", () => {
@@ -560,25 +949,62 @@ async function openProfileView(userId) {
   $("profileViewBody").innerHTML = `<div class="emptyState">Loading…</div>`;
   $("profileViewOverlay").classList.remove("hidden");
 
-  const { data, error } = await supabaseClient.rpc("get_public_profile", { p_id: userId });
+  const [{ data, error }, { data: ratingData }, { data: reviewsData }, { data: followRow }, { data: myReview }] = await Promise.all([
+    supabaseClient.rpc("get_public_profile", { p_id: userId }),
+    supabaseClient.rpc("get_profile_rating", { p_id: userId }),
+    supabaseClient.from("profile_reviews").select("*").eq("subject_id", userId).order("created_at", { ascending: false }).limit(20),
+    supabaseClient.from("follows").select("id").eq("follower_id", currentUser.id).eq("followee_id", userId).maybeSingle(),
+    supabaseClient.from("profile_reviews").select("rating,body").eq("reviewer_id", currentUser.id).eq("subject_id", userId).maybeSingle(),
+  ]);
   const p = Array.isArray(data) ? data[0] : data;
   if (error || !p) { $("profileViewBody").innerHTML = `<div class="emptyState">Couldn't load this profile.</div>`; return; }
 
-  const { data: followRow } = await supabaseClient.from("follows").select("id").eq("follower_id", currentUser.id).eq("followee_id", userId).maybeSingle();
   const isFollowing = !!followRow;
   const initial = (p.full_name || "?").trim().charAt(0).toUpperCase();
+  const rating = Array.isArray(ratingData) ? ratingData[0] : ratingData;
+  const avgRating = rating ? Number(rating.avg_rating) : 0;
+  const reviewCount = rating ? rating.review_count : 0;
+  const starsStr = "★".repeat(Math.round(avgRating)) + "☆".repeat(5 - Math.round(avgRating));
+
+  // Fetch reviewer names for the review list in one batch
+  const reviewerIds = [...new Set((reviewsData || []).map(r => r.reviewer_id))];
+  let reviewerNames = {};
+  if (reviewerIds.length) {
+    const { data: reviewers } = await supabaseClient.from("profiles").select("id, full_name").in("id", reviewerIds);
+    (reviewers || []).forEach(r => { reviewerNames[r.id] = r.full_name; });
+  }
 
   $("profileViewBody").innerHTML = `
     <div class="profileViewAvatar">${p.avatar_url ? `<img src="${escapeHtml(p.avatar_url)}" style="width:100%;height:100%;border-radius:50%;object-fit:cover"/>` : initial}</div>
-    <div class="profileViewName">${escapeHtml(p.full_name || "VORTEXIA user")}</div>
-    <div class="profileViewMeta">MG ID ${escapeHtml(p.mg_id || "—")}${p.vip_status === "active" || p.vip_status === "trialing" ? " • VIP Verified" : ""}</div>
+    <div class="profileViewName">${renderVipName(p.full_name || "VORTEXIA user", p)}</div>
+    <div class="profileViewMeta">MG ID ${escapeHtml(p.mg_id || "—")}${getVipTier(p) ? " • VIP Verified" : ""}</div>
     <div class="profileViewMeta">
       ${p.is_active === null ? "" : `<span class="profileViewStatusDot ${p.is_active ? "isActive" : ""}"></span>${p.is_active ? "Active now" : "Offline"}`}
       ${p.current_room_id ? " • In a room" : ""}
     </div>
+    <div style="margin:8px 0">${renderReputationBadge(p.reputation_tier)} <span class="itemMeta">${p.reputation_score || 0} pts</span></div>
+    <div class="skillChipsRow">${renderSkillChips(p.skills, false)}</div>
     <div class="profileViewBio">${escapeHtml(p.bio || "No bio yet.")}</div>
     <button class="btn ${isFollowing ? "btnGhost" : "btnPrimary"}" id="btnToggleFollow">${isFollowing ? "Following ✓" : "Follow"}</button>
+
+    <div class="cardTitle" style="margin-top:18px;font-size:14px">⭐ Ratings &amp; reviews</div>
+    <div class="itemMeta" style="margin-bottom:8px">${starsStr} ${avgRating.toFixed(1)} (${reviewCount} review${reviewCount === 1 ? "" : "s"})</div>
+
+    <div id="reviewFormWrap">
+      <div class="starRow" id="myStarPicker">${[1,2,3,4,5].map(n => `<span class="starPick${myReview && n <= myReview.rating ? " active" : ""}" data-star="${n}">★</span>`).join("")}</div>
+      <textarea id="myReviewBody" rows="2" placeholder="Leave a review (optional)…" style="margin-top:6px">${escapeHtml(myReview?.body || "")}</textarea>
+      <button class="btn btnPrimary btnSm" id="btnSubmitReview" style="margin-top:6px">${myReview ? "Update review" : "Submit review"}</button>
+    </div>
+
+    <div id="reviewsList" style="margin-top:10px">
+      ${(reviewsData || []).length ? reviewsData.map(r => `
+        <div class="reviewItem">
+          <div class="itemTitle" style="font-size:13px">${escapeHtml(reviewerNames[r.reviewer_id] || "VORTEXIA user")} <span style="color:#f59e0b">${"★".repeat(r.rating)}${"☆".repeat(5 - r.rating)}</span></div>
+          ${r.body ? `<div class="itemMeta">${escapeHtml(r.body)}</div>` : ""}
+        </div>`).join("") : `<div class="emptyState">No reviews yet — be the first!</div>`}
+    </div>
   `;
+
   $("btnToggleFollow").addEventListener("click", async () => {
     if (isFollowing) {
       await supabaseClient.from("follows").delete().eq("follower_id", currentUser.id).eq("followee_id", userId);
@@ -586,6 +1012,25 @@ async function openProfileView(userId) {
       await supabaseClient.from("follows").insert({ follower_id: currentUser.id, followee_id: userId });
       createNotification({ user_id: userId, type: "new_follower", title: `${currentProfile?.full_name || "Someone"} added you as a friend`, body: null });
     }
+    openProfileView(userId);
+  });
+
+  let myStars = myReview?.rating || 0;
+  const starEls = $("myStarPicker").querySelectorAll(".starPick");
+  starEls.forEach(el => {
+    el.addEventListener("click", () => {
+      myStars = parseInt(el.dataset.star, 10);
+      starEls.forEach(s => s.classList.toggle("active", parseInt(s.dataset.star, 10) <= myStars));
+    });
+  });
+  $("btnSubmitReview").addEventListener("click", async () => {
+    if (!myStars) { showToast("Please pick a star rating first."); return; }
+    const body = $("myReviewBody").value.trim();
+    const { error } = await supabaseClient.from("profile_reviews")
+      .upsert({ reviewer_id: currentUser.id, subject_id: userId, rating: myStars, body: body || null }, { onConflict: "reviewer_id,subject_id" });
+    if (error) { showToast("Could not save review: " + error.message); return; }
+    await supabaseClient.rpc("recalc_reputation", { p_user_id: userId });
+    showToast("Review saved!");
     openProfileView(userId);
   });
 }
@@ -945,7 +1390,13 @@ $("formSchedule").addEventListener("submit", async (e) => {
   const title = $("mTitle").value.trim();
   const date = $("mDate").value;
   const time = $("mTime").value;
-  const duration = parseInt($("mDuration").value, 10) || 40;
+  const membership = computeMembershipStatus(currentProfile || {});
+  const isVip = membership.state === "trialing" || membership.state === "active";
+  let duration = parseInt($("mDuration").value, 10) || 40;
+  if (!isVip && duration > 40) {
+    duration = 40;
+    showToast("Free plan is capped at 40 minutes per meeting — upgrade to VIP for unlimited length.");
+  }
   const timezone = $("mTimezone").value;
   const passcode = $("mPasscode").value.trim() || null;
   const invitesRaw = $("mInvites").value.trim();
@@ -1463,7 +1914,7 @@ async function renderContactsList() {
     return;
   }
 
-  const { data: contacts } = await supabaseClient.from("profiles").select("id,full_name,mg_id,vip_status").in("id", followingIds);
+  const { data: contacts } = await supabaseClient.from("profiles").select("id,full_name,mg_id,vip_status,vip_until,trial_ends_at,plan").in("id", followingIds);
   if (!contacts || !contacts.length) {
     $("contactsList").innerHTML = `<div class="emptyState">No contacts found.</div>`;
     return;
@@ -1472,8 +1923,8 @@ async function renderContactsList() {
   $("contactsList").innerHTML = contacts.map(c => `
     <div class="contactItem" data-contact-id="${c.id}">
       <div>
-        <div class="contactName">${escapeHtml(c.full_name || "—")}</div>
-        <div class="contactMeta">MG ID ${escapeHtml(c.mg_id || "—")}${c.vip_status === "active" || c.vip_status === "trialing" ? " • VIP Verified" : ""}</div>
+        <div class="contactName">${renderVipName(c.full_name || "—", c)}</div>
+        <div class="contactMeta">MG ID ${escapeHtml(c.mg_id || "—")}${getVipTier(c) ? " • VIP Verified" : ""}</div>
       </div>
       <div class="contactActions">
         <button class="btn btnPrimary btnSm" data-action="message">💬</button>
@@ -1589,8 +2040,9 @@ $("btnAddFriends").addEventListener("click", () => {
         resultsEl.innerHTML = results.map(p => `
           <div class="contactItem">
             <div>
-              <div class="contactName">${escapeHtml(p.full_name || "—")}</div>
-              <div class="contactMeta">MG ID ${escapeHtml(p.mg_id || "—")}${p.vip_status === "active" || p.vip_status === "trialing" ? " • VIP" : ""}</div>
+              <div class="contactName">${nameLink(p.full_name || "—", p, p.id)}</div>
+              <div class="contactMeta">MG ID ${escapeHtml(p.mg_id || "—")}${getVipTier(p) ? " • VIP" : ""} ${renderReputationBadge(p.reputation_tier)}</div>
+              ${p.skills && p.skills.length ? `<div class="skillChipsRow" style="margin-top:4px">${renderSkillChips(p.skills.slice(0, 4), false)}</div>` : ""}
             </div>
             <button class="btn btnPrimary btnSm" data-user-id="${p.id}" data-action="add-friend">Follow</button>
           </div>`).join("");
@@ -3340,163 +3792,1002 @@ document.getElementById("moreSubTabs").addEventListener("click", (e) => {
   document.querySelectorAll("#moreSubTabs .subTabBtn").forEach(b => b.classList.toggle("active", b === btn));
   document.querySelectorAll("#viewMore .subView").forEach(v => v.classList.remove("active"));
   $("more" + btn.dataset.sub.charAt(0).toUpperCase() + btn.dataset.sub.slice(1)).classList.add("active");
+  if (btn.dataset.sub === "feed") loadFeed();
+  else if (btn.dataset.sub === "marketplace") loadMarketplace();
+  else if (btn.dataset.sub === "forum") loadForum();
 });
 
-/* ---------- FEED (read-only announcements) ---------- */
-async function loadFeed() {
-  const { data, error } = await supabaseClient.from("feed_posts").select("*").order("created_at", { ascending: false }).limit(30);
-  const targets = [$("feedList"), $("dashFeedList")].filter(Boolean);
-  if (error) {
-    console.error("loadFeed:", error);
-    targets.forEach(list => list.innerHTML = `<div class="emptyState">Could not load feed.</div>`);
-    return;
-  }
-  if (!data || !data.length) {
-    targets.forEach(list => list.innerHTML = `<div class="emptyState">No announcements yet — check back soon.</div>`);
-    return;
-  }
-  const html = data.map(p => `
-    <div class="feedCard">
-      <div class="feedMeta">${fmtDate(p.created_at)}${p.author_name ? " • " + escapeHtml(p.author_name) : ""}</div>
-      <div class="feedTitle">${escapeHtml(p.title || "")}</div>
-      <div class="feedBody">${escapeHtml(p.body || "")}</div>
-    </div>
-  `).join("");
-  // Dashboard shows a shorter preview (first 5); Community shows the full feed.
-  targets.forEach(list => { list.innerHTML = list.id === "dashFeedList" ? data.slice(0, 5).map(p => `
-    <div class="feedCard">
-      <div class="feedMeta">${fmtDate(p.created_at)}${p.author_name ? " • " + escapeHtml(p.author_name) : ""}</div>
-      <div class="feedTitle">${escapeHtml(p.title || "")}</div>
-      <div class="feedBody">${escapeHtml(p.body || "")}</div>
-    </div>
-  `).join("") : html; });
-}
-
-/* ---------- MARKETPLACE (job listings) ---------- */
-async function loadJobs() {
-  const list = $("jobList");
-  const { data, error } = await supabaseClient.from("job_listings").select("*").order("created_at", { ascending: false }).limit(50);
-  if (error) { console.error("loadJobs:", error); list.innerHTML = `<div class="emptyState">Could not load listings.</div>`; return; }
-  const visible = (data || []).filter(j => !j.flagged || j.poster_id === currentUser?.id);
-  if (!visible.length) { list.innerHTML = `<div class="emptyState">No job listings yet — be the first to post one.</div>`; return; }
-  list.innerHTML = visible.map(j => `
-    <div class="jobCard">
-      <div class="jobTop">
-        <div class="jobTitle">${escapeHtml(j.title || "")}${j.flagged ? ` <span class="badge badgeFree" style="color:var(--danger)">Under review</span>` : ""}</div>
-        ${j.budget ? `<div class="jobBudget">${escapeHtml(j.budget)}</div>` : ""}
-      </div>
-      <div class="jobDesc">${escapeHtml(j.description || "")}</div>
-      <div class="jobFoot">
-        <span class="jobPoster">Posted by ${escapeHtml(j.poster_name || "Someone")}</span>
-        <button class="btn btnGhost btnSm" data-apply-job="${j.id}">Apply</button>
-      </div>
-    </div>
-  `).join("");
-  list.querySelectorAll("[data-apply-job]").forEach(btn => {
-    btn.addEventListener("click", () => applyToJob(btn.dataset.applyJob));
-  });
-}
-
-async function applyToJob(jobId) {
-  if (!currentUser) { showToast("Please log in first."); return; }
-  const { error } = await supabaseClient.from("job_applications").insert({
-    job_id: jobId, applicant_id: currentUser.id, applicant_name: currentProfile?.full_name || "Guest",
-  });
-  if (error) { showToast("Could not apply: " + error.message); return; }
-  showToast("Application sent!");
-}
-
-$("btnPostJob").addEventListener("click", () => {
-  openModal(`
-    <div class="modalTitle">Post a job</div>
-    <div class="field"><label>Title</label><input type="text" id="jobTitleInput" placeholder="e.g. Video editor needed" /></div>
-    <div class="field"><label>Budget (optional)</label><input type="text" id="jobBudgetInput" placeholder="e.g. ₱5,000" /></div>
-    <div class="field"><label>Description</label><textarea id="jobDescInput" rows="4" placeholder="Describe the job…"></textarea></div>
-    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
-      <button class="btn btnGhost" id="jobPostCancel">Cancel</button>
-      <button class="btn btnPrimary" id="jobPostSubmit">Post</button>
-    </div>
-  `);
-  $("jobPostCancel").addEventListener("click", closeModal);
-  $("jobPostSubmit").addEventListener("click", async () => {
-    const title = $("jobTitleInput").value.trim();
-    const budget = $("jobBudgetInput").value.trim();
-    const description = $("jobDescInput").value.trim();
-    if (!title || !description) { showToast("Please fill in title and description."); return; }
-    const mod = moderateText(title + " " + description);
-    const { error } = await supabaseClient.from("job_listings").insert({
-      title, budget: budget || null, description,
-      poster_id: currentUser?.id || null, poster_name: currentProfile?.full_name || "Guest",
-      flagged: mod.flagged, flag_reason: mod.reason,
-    });
-    if (error) { showToast("Could not post job: " + error.message); return; }
-    closeModal();
-    showToast(mod.flagged ? "Posted — pending review (contains restricted content)." : "Job posted!");
-    loadJobs();
-  });
-});
-
-/* ---------- FORUM (discussions) ---------- */
-/* ---------- Auto-moderation (scam / spam detection) ---------- */
+/* ============================================================
+   AUTO-MODERATION
+   ============================================================ */
 const MODERATION_BLOCKLIST = [
-  // scam / financial-fraud patterns
   "send money first", "gcash mo muna", "advance payment bago", "investment guaranteed",
   "double your money", "sigurado kikita", "click this link to claim", "claim your prize",
   "free load promo", "verify your account here", "bit.ly", "tinyurl.com",
-  // contact-info harvesting / off-platform redirect (common scam funnel)
   "add me sa telegram", "message me sa whatsapp", "text lang sa number",
 ];
-
 function moderateText(text) {
   const lower = (text || "").toLowerCase();
   const hit = MODERATION_BLOCKLIST.find(k => lower.includes(k));
   return { flagged: !!hit, reason: hit || null };
 }
 
-async function loadForum() {
-  const list = $("forumList");
-  const { data, error } = await supabaseClient.from("forum_posts").select("*").order("created_at", { ascending: false }).limit(50);
-  if (error) { console.error("loadForum:", error); list.innerHTML = `<div class="emptyState">Could not load discussions.</div>`; return; }
-  if (!data || !data.length) { list.innerHTML = `<div class="emptyState">No discussions yet — start one.</div>`; return; }
-  const visible = data.filter(f => !f.flagged || f.author_id === currentUser?.id);
-  if (!visible.length) { list.innerHTML = `<div class="emptyState">No discussions yet — start one.</div>`; return; }
-  list.innerHTML = visible.map(f => `
-    <div class="forumCard" data-thread="${f.id}">
-      <div class="forumTitle">${escapeHtml(f.title || "")}${f.flagged ? ` <span class="badge badgeFree" style="color:var(--danger)">Under review</span>` : ""}</div>
-      <div class="forumMeta"><span>${escapeHtml(f.author_name || "Guest")}</span><span>${fmtDate(f.created_at)}</span><span>${f.reply_count || 0} replies</span></div>
+/* ============================================================
+   COMMUNITY ROLES
+   ============================================================ */
+const ADMIN_ROLES = ["founder", "co-founder", "head_admin", "admin"];
+function isAdminUser() { return ADMIN_ROLES.includes(currentProfile?.role); }
+function isFounderUser() { return currentProfile?.role === "founder"; }
+
+function getRoleBadgeHtml(role) {
+  const map = {
+    "founder":     `<span class="roleBadge roleBadge--founder">&#128081; Founder</span>`,
+    "co-founder":  `<span class="roleBadge roleBadge--cofounder">&#129352; Co-Founder</span>`,
+    "head_admin":  `<span class="roleBadge roleBadge--headAdmin">&#128737; Head Admin</span>`,
+    "admin":       `<span class="roleBadge roleBadge--admin">&#9881; Admin</span>`,
+  };
+  return map[role] || "";
+}
+
+let communityRolesCache = {};
+let communityVipCache = {};
+
+async function loadCommunityRoles() {
+  const { data } = await supabaseClient.from("community_roles").select("user_id, role");
+  if (data) { data.forEach(r => { communityRolesCache[r.user_id] = r.role; }); }
+  const { data: vipData } = await supabaseClient.from("profiles").select("id, plan, vip_status, vip_until, trial_ends_at");
+  if (vipData) { vipData.forEach(r => { communityVipCache[r.id] = r; }); }
+}
+
+function getUserRoleLabel(userId) {
+  return communityRolesCache[userId] || null;
+}
+
+// Returns the active plan id ("essential"/"growth"/"business") if the given profile-like
+// row currently has VIP access (trialing or active & not expired), otherwise null.
+function getVipTier(row) {
+  if (!row) return null;
+  const now = Date.now();
+  const trialActive = row.vip_status === "trialing" && row.trial_ends_at && new Date(row.trial_ends_at).getTime() > now;
+  const planActive = row.vip_status === "active" && (!row.vip_until || new Date(row.vip_until).getTime() > now);
+  if (!trialActive && !planActive) return null;
+  return row.plan || "growth";
+}
+
+function vipNameClass(tier) {
+  if (tier === "business") return "vipNameBusiness";
+  if (tier === "essential") return "vipNameEssential";
+  if (tier) return "vipNameGrowth"; // growth or unknown VIP tier defaults to growth color
+  return "";
+}
+
+// Renders a user's display name, colored by VIP tier if applicable. `row` should have
+// vip_status/vip_until/trial_ends_at/plan — either the full profile row (self) or a
+// cached lookup via getUserVipRow(userId) for other users.
+function renderVipName(name, row) {
+  const safe = escapeHtml(name || "Unnamed");
+  const cls = vipNameClass(getVipTier(row));
+  return cls ? `<span class="${cls}">${safe}</span>` : safe;
+}
+
+// Phase 4B — reputation tier badge (🥉 Newcomer / 🥈 Regular / 🥇 Contributor / 💎 Legend)
+const REP_TIER_META = {
+  newcomer:    { emoji: "🥉", label: "Newcomer",    cls: "repBadge--newcomer" },
+  regular:     { emoji: "🥈", label: "Regular",     cls: "repBadge--regular" },
+  contributor: { emoji: "🥇", label: "Contributor", cls: "repBadge--contributor" },
+  legend:      { emoji: "💎", label: "Legend",      cls: "repBadge--legend" },
+};
+function renderReputationBadge(tier) {
+  const meta = REP_TIER_META[tier] || REP_TIER_META.newcomer;
+  return `<span class="repBadge ${meta.cls}">${meta.emoji} ${meta.label}</span>`;
+}
+function renderSkillChips(skills, editable) {
+  if (!skills || !skills.length) return editable ? "" : `<span class="itemMeta">No skills added yet.</span>`;
+  return skills.map(s => `
+    <span class="skillChip">${escapeHtml(s)}${editable ? `<button type="button" data-remove-skill="${escapeHtml(s)}">✕</button>` : ""}</span>
+  `).join("");
+}
+
+// Wraps a rendered name so tapping it opens that user's public profile.
+// Pass the userId whenever it's known; falls back to plain (non-clickable) name otherwise.
+function nameLink(name, row, userId) {
+  const inner = renderVipName(name, row);
+  if (!userId) return inner;
+  return `<span data-open-profile="${escapeHtml(userId)}" style="cursor:pointer">${inner}</span>`;
+}
+document.addEventListener("click", (e) => {
+  const el = e.target.closest("[data-open-profile]");
+  if (!el) return;
+  const uid = el.dataset.openProfile;
+  if (uid && currentUser && uid !== currentUser.id) openProfileView(uid);
+});
+
+function getUserVipRow(userId) {
+  return communityVipCache[userId] || null;
+}
+
+async function loadAdminRoleList() {
+  const list = $("adminRoleList");
+  if (!list) return;
+  const { data, error } = await supabaseClient.from("community_roles")
+    .select("user_id, role, assigned_by, created_at, profiles:user_id(full_name, email)").order("created_at");
+  if (error || !data || !data.length) { list.innerHTML = `<div class="emptyState">No admins assigned yet.</div>`; return; }
+  list.innerHTML = data.map(r => `
+    <div class="listItem" style="justify-content:space-between">
+      <div>
+        <div class="itemTitle">${escapeHtml(r.profiles && r.profiles.full_name ? r.profiles.full_name : "Unknown")}</div>
+        <div class="itemMeta">${escapeHtml(r.profiles && r.profiles.email ? r.profiles.email : "")} ${getRoleBadgeHtml(r.role)}</div>
+      </div>
+      ${isFounderUser() ? `<button class="btn btnDanger btnSm" data-remove-role="${r.user_id}">Remove</button>` : ""}
     </div>
   `).join("");
-  list.querySelectorAll("[data-thread]").forEach(card => {
-    card.addEventListener("click", () => openTextModal("Discussion", `<p>${escapeHtml(card.querySelector(".forumTitle").textContent)}</p><p class="itemMeta">Full thread view coming soon.</p>`));
+  list.querySelectorAll("[data-remove-role]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const { error } = await supabaseClient.from("community_roles").delete().eq("user_id", btn.dataset.removeRole);
+      if (error) { showToast("Error: " + error.message); return; }
+      showToast("Role removed.");
+      loadAdminRoleList();
+    });
+  });
+}
+
+let roleSearchTarget = null;
+if ($("roleSearchInput")) {
+  $("roleSearchInput").addEventListener("input", debounce(async (e) => {
+    const q = e.target.value.trim();
+    const results = $("roleSearchResults");
+    if (!q) { results.innerHTML = ""; return; }
+    const { data } = await supabaseClient.from("profiles").select("id, full_name, email, role")
+      .or(`full_name.ilike.%${q}%,email.ilike.%${q}%`).limit(5);
+    if (!data || !data.length) { results.innerHTML = `<div class="emptyState" style="padding:8px">No users found.</div>`; return; }
+    results.innerHTML = data.map(u => `
+      <div class="roleSearchResult" data-uid="${u.id}" data-uname="${escapeHtml(u.full_name || u.email || u.id)}">
+        <span>${escapeHtml(u.full_name || "?")} <span class="itemMeta">${escapeHtml(u.email || u.id)}</span></span>
+        ${u.role === "founder" ? `<span class="roleBadge roleBadge--founder">&#128081; Founder</span>` : ""}
+      </div>
+    `).join("");
+    results.querySelectorAll(".roleSearchResult").forEach(row => {
+      row.addEventListener("click", () => {
+        roleSearchTarget = { id: row.dataset.uid, name: row.dataset.uname };
+        results.querySelectorAll(".roleSearchResult").forEach(r => r.classList.remove("selected"));
+        row.classList.add("selected");
+        $("roleSearchInput").value = row.dataset.uname;
+      });
+    });
+  }, 400));
+}
+
+if ($("btnAssignRole")) {
+  $("btnAssignRole").addEventListener("click", async () => {
+    if (!isFounderUser()) { showToast("Only the Founder can assign roles."); return; }
+    if (!roleSearchTarget) { showToast("Select a user first."); return; }
+    const role = $("roleSelectDropdown").value;
+    const { error } = await supabaseClient.from("community_roles").upsert({
+      user_id: roleSearchTarget.id, role, assigned_by: currentUser.id,
+    }, { onConflict: "user_id" });
+    if (error) { showToast("Error: " + error.message); return; }
+    showToast(roleSearchTarget.name + " assigned as " + role + "!");
+    roleSearchTarget = null;
+    $("roleSearchInput").value = "";
+    $("roleSearchResults").innerHTML = "";
+    loadAdminRoleList();
+  });
+}
+
+if ($("btnToggleAdminPanel")) {
+  $("btnToggleAdminPanel").addEventListener("click", () => {
+    const panel = $("communityAdminPanel");
+    panel.classList.toggle("hidden");
+    if (!panel.classList.contains("hidden")) loadAdminRoleList();
+  });
+}
+
+/* ============================================================
+   FEED — Announcements (admin-only post)
+   ============================================================ */
+async function loadFeed() {
+  const { data, error } = await supabaseClient.from("feed_posts").select("*")
+    .order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(30);
+  const list = $("feedList");
+  if (!list) return;
+  if (error) { list.innerHTML = `<div class="emptyState">Could not load feed.</div>`; return; }
+
+  const adminHead = $("adminAnnounceHead");
+  if (adminHead) adminHead.classList.toggle("hidden", !isAdminUser());
+  const adminToggle = $("btnToggleAdminPanel");
+  if (adminToggle) adminToggle.classList.toggle("hidden", !isFounderUser());
+
+  if (!data || !data.length) {
+    list.innerHTML = `<div class="emptyState">No announcements yet — check back soon.</div>`;
+    return;
+  }
+  list.innerHTML = data.map(p => `
+    <div class="feedCard${p.pinned ? " feedCard--pinned" : ""}">
+      ${p.pinned ? `<div class="feedPinLabel">&#128204; Pinned</div>` : ""}
+      ${p.image_url ? `<img class="feedImage" src="${escapeHtml(p.image_url)}" alt="" loading="lazy" />` : ""}
+      <div class="feedTitle">${escapeHtml(p.title || "")}</div>
+      <div class="feedBody">${escapeHtml(p.body || "")}</div>
+      <div class="feedMeta">${fmtDate(p.created_at)}${p.author_name ? " &bull; " + escapeHtml(p.author_name) : ""}${p.author_role ? " " + getRoleBadgeHtml(p.author_role) : ""}</div>
+    </div>
+  `).join("");
+}
+
+// ---------------------------------------------------------------------------
+// Dashboard: combined feed (announcements + marketplace + jobs), newest first
+// ---------------------------------------------------------------------------
+async function loadDashboardFeed() {
+  const list = $("dashFeedList");
+  if (!list) return;
+  list.innerHTML = `<div class="emptyState">Loading…</div>`;
+  const tab = (typeof dashFeedActiveTab !== "undefined") ? dashFeedActiveTab : "foryou";
+
+  let followIds = [];
+  if (tab === "following") {
+    const { data: follows } = await supabaseClient.from("follows").select("followee_id").eq("follower_id", currentUser?.id);
+    followIds = (follows || []).map(f => f.followee_id);
+    if (!followIds.length) {
+      list.innerHTML = `<div class="emptyState">Follow people to see their posts here.</div>`;
+      return;
+    }
+  }
+
+  let mkQuery = supabaseClient.from("marketplace_listings").select("*").limit(tab === "popular" ? 20 : 15);
+  if (tab === "popular") mkQuery = mkQuery.order("view_count", { ascending: false });
+  else mkQuery = mkQuery.order("created_at", { ascending: false });
+  if (tab === "following") mkQuery = mkQuery.in("posted_by", followIds);
+
+  let feedQuery = supabaseClient.from("feed_posts").select("*").limit(10);
+  if (tab !== "following") feedQuery = feedQuery.order("created_at", { ascending: false });
+
+  const [{ data: feedData }, { data: mkData }] = await Promise.all([
+    tab === "following" ? Promise.resolve({ data: [] }) : feedQuery,
+    mkQuery,
+  ]);
+
+  const visibleMk = (mkData || []).filter(l => !l.flagged || l.posted_by === currentUser?.id);
+  let combined = [
+    ...(feedData || []).map(p => ({ ...p, _kind: "announcement" })),
+    ...visibleMk.map(l => ({ ...l, _kind: l.type === "job" ? "job" : "marketplace" })),
+  ];
+
+  if (tab === "popular") {
+    combined = combined.sort((a, b) => ((b.view_count || 0) + (b.likes_count || 0)) - ((a.view_count || 0) + (a.likes_count || 0)));
+  } else {
+    combined = combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  }
+  combined = combined.slice(0, 20);
+
+  if (!combined.length) { list.innerHTML = `<div class="emptyState">Nothing here yet — check back soon.</div>`; return; }
+
+  const typeLabel = { announcement: "📢 Announcement", job: "💼 Job", marketplace: "🛍️ Marketplace" };
+
+  list.innerHTML = combined.map(item => {
+    if (item._kind === "announcement") {
+      return `
+        <div class="dashFeedCard${item.pinned ? " dashFeedCard--pinned" : ""}">
+          <div class="dashFeedType">${typeLabel.announcement}</div>
+          ${item.image_url ? `<img class="dashFeedImg" src="${escapeHtml(item.image_url)}" alt="" loading="lazy" />` : ""}
+          <div class="dashFeedTitle">${escapeHtml(item.title || "")}</div>
+          <div class="dashFeedBody">${escapeHtml((item.body || "").slice(0, 180))}${item.body?.length > 180 ? "…" : ""}</div>
+          <div class="dashFeedMeta">${fmtDate(item.created_at)}${item.author_name ? " · " + escapeHtml(item.author_name) : ""}</div>
+        </div>`;
+    }
+    const priceDisplay = item.price ? "₱" + Number(item.price).toLocaleString() : "Negotiable";
+    const photos = item.photos || [];
+    return `
+      <div class="dashFeedCard" data-dash-mk="${item.id}" style="cursor:pointer">
+        ${photos[0] ? `<img class="dashFeedImg" src="${escapeHtml(photos[0])}" alt="" loading="lazy" />` : ""}
+        <div class="dashFeedType">${typeLabel[item._kind]}</div>
+        <div class="dashFeedTitle">${escapeHtml(item.title || "")}</div>
+        <div class="dashFeedBody">${priceDisplay}${item.location ? " · 📍" + escapeHtml(item.location) : ""}</div>
+        <div class="dashFeedMeta">${fmtDate(item.created_at)} · ${nameLink(item.poster_name || "Seller", getUserVipRow(item.posted_by), item.posted_by)}</div>
+      </div>`;
+  }).join("");
+
+  list.querySelectorAll("[data-dash-mk]").forEach(card => {
+    const item = visibleMk.find(l => l.id === card.dataset.dashMk);
+    if (item) card.addEventListener("click", (e) => { if (e.target.closest("[data-open-profile]")) return; openMarketplaceDetail(item); });
+  });
+
+  // Update tiles after feed data is loaded
+  setTimeout(updateDashTiles, 100);
+  updateLatestUpdatesTile();
+}
+
+if ($("btnPostAnnouncement")) {
+  $("btnPostAnnouncement").addEventListener("click", () => {
+    if (!isAdminUser()) { showToast("Only admins can post announcements."); return; }
+    openModal(`
+      <div class="modalTitle">&#128226; Post Announcement</div>
+      <div class="field"><label>Title</label><input type="text" id="annTitleInput" placeholder="Announcement title" /></div>
+      <div class="field"><label>Message</label><textarea id="annBodyInput" rows="4" placeholder="Write your announcement..."></textarea></div>
+      <div class="field"><label>Image URL (optional)</label><input type="text" id="annImageInput" placeholder="https://..." /></div>
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+        <input type="checkbox" id="annPinCheck" /> <label for="annPinCheck">&#128204; Pin this announcement</label>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:4px">
+        <button class="btn btnGhost" id="annCancel">Cancel</button>
+        <button class="btn btnPrimary" id="annSubmit">Post</button>
+      </div>
+    `);
+    $("annCancel").addEventListener("click", closeModal);
+    $("annSubmit").addEventListener("click", async () => {
+      const title = $("annTitleInput").value.trim();
+      const body = $("annBodyInput").value.trim();
+      const image_url = $("annImageInput").value.trim() || null;
+      const pinned = $("annPinCheck").checked;
+      if (!title || !body) { showToast("Please fill in title and message."); return; }
+      const { error } = await supabaseClient.from("feed_posts").insert({
+        title, body, image_url, pinned,
+        author_name: currentProfile ? currentProfile.full_name : "Admin",
+        author_id: currentUser ? currentUser.id : null,
+        author_role: currentProfile ? currentProfile.role : null,
+      });
+      if (error) { showToast("Could not post: " + error.message); return; }
+      closeModal();
+      showToast("Announcement posted!");
+      loadFeed();
+      loadDashboardFeed();
+      updateLatestUpdatesTile();
+    });
+  });
+}
+
+/* ============================================================
+   MARKETPLACE — FB-style listings
+   ============================================================ */
+let mkFilter = "all";
+
+if (document.getElementById("mkFilterRow")) {
+  document.getElementById("mkFilterRow").addEventListener("click", (e) => {
+    const btn = e.target.closest(".mkFilterBtn");
+    if (!btn) return;
+    document.querySelectorAll(".mkFilterBtn").forEach(b => b.classList.toggle("active", b === btn));
+    mkFilter = btn.dataset.mkfilter;
+    loadMarketplace();
+  });
+}
+
+async function loadMarketplace() {
+  const grid = $("mkGrid");
+  if (!grid) return;
+  let query = supabaseClient.from("marketplace_listings").select("*").order("created_at", { ascending: false }).limit(50);
+  if (mkFilter !== "all") query = query.eq("type", mkFilter);
+  const { data, error } = await query;
+  if (error) { grid.innerHTML = `<div class="emptyState">Could not load listings.</div>`; return; }
+  const visible = (data || []).filter(l => !l.flagged || l.posted_by === currentUser?.id);
+  if (!visible.length) { grid.innerHTML = `<div class="emptyState">No listings yet — be the first!</div>`; return; }
+  grid.innerHTML = visible.map(l => {
+    const photo = l.photos && l.photos[0] ? l.photos[0] : null;
+    const typeIcon = l.type === "job" ? "&#128188;" : l.type === "service" ? "&#128295;" : "&#128717;";
+    const condLabel = l.condition === "new" ? "Brand New" : l.condition === "used" ? "Used" : l.condition === "for parts" ? "For Parts" : (l.condition || "");
+    const priceDisplay = l.price ? "&#8369;" + Number(l.price).toLocaleString() : (l.budget_php ? "&#8369;" + Number(l.budget_php).toLocaleString() : "Negotiable");
+    return `
+      <div class="mkCard" data-mk-id="${l.id}">
+        <div class="mkPhoto">${photo ? `<img src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="mkPhotoPlaceholder">${typeIcon}</div>`}</div>
+        <div class="mkInfo">
+          <div class="mkTitle">${escapeHtml(l.title || "")}</div>
+          <div class="mkPrice">${priceDisplay}</div>
+          <div class="mkMeta">
+            ${condLabel ? `<span class="mkCondBadge">${escapeHtml(condLabel)}</span>` : ""}
+            ${l.location ? `<span class="mkLoc">&#128205; ${escapeHtml(l.location)}</span>` : ""}
+            ${l.flagged ? `<span class="badge" style="color:var(--danger);font-size:10px">Under review</span>` : ""}
+          </div>
+          <div class="mkSellerRow">
+            <span class="mkSellerName">${nameLink(l.poster_name || "Seller", getUserVipRow(l.posted_by), l.posted_by)}</span>
+            <span class="mkTime">${fmtDate(l.created_at)}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join("");
+  grid.querySelectorAll("[data-mk-id]").forEach(card => {
+    const item = visible.find(l => l.id === card.dataset.mkId);
+    card.addEventListener("click", (e) => { if (e.target.closest("[data-open-profile]")) return; openMarketplaceDetail(item); });
+  });
+}
+
+function openMarketplaceDetail(l) {
+  if (!l) return;
+  const typeIcon = l.type === "job" ? "&#128188;" : l.type === "service" ? "&#128295;" : "&#128717;";
+  const condLabel = l.condition === "new" ? "Brand New" : l.condition === "used" ? "Used" : l.condition === "for parts" ? "For Parts" : (l.condition || "");
+  const photos = l.photos && l.photos.length ? l.photos : [];
+  const priceDisplay = l.price ? "&#8369;" + Number(l.price).toLocaleString() : "Price negotiable";
+  openModal(`
+    <div class="modalTitle">${typeIcon} ${escapeHtml(l.title || "")}</div>
+    ${photos.length ? `<div class="mkDetailPhotos">${photos.map(p => `<img src="${escapeHtml(p)}" />`).join("")}</div>` : ""}
+    <div class="mkDetailPrice">${priceDisplay}</div>
+    ${condLabel ? `<div class="mkDetailCond">${escapeHtml(condLabel)}</div>` : ""}
+    <div class="itemMeta" style="margin:8px 0">${escapeHtml(l.description || "")}</div>
+    ${l.location ? `<div class="itemMeta">&#128205; ${escapeHtml(l.location)}</div>` : ""}
+    <div class="mkSellerRow" style="margin:10px 0 14px">
+      <span class="mkSellerName">&#129489; ${nameLink(l.poster_name || "Seller", getUserVipRow(l.posted_by), l.posted_by)}</span>
+      <span class="mkTime">${fmtDate(l.created_at)}</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btnPrimary" id="mkMsgSeller" style="flex:1">&#128172; Message Seller</button>
+      ${l.posted_by !== (currentUser && currentUser.id) ? `<button class="btn btnGhost" id="mkReportListing" style="color:var(--danger)">&#128681; Report</button>` : `<button class="btn btnDanger btnSm" id="mkDeleteListing">Delete</button>`}
+    </div>
+    <button class="btn btnGhost btnSm" id="mkModalClose" style="width:100%;margin-top:8px">Close</button>
+  `);
+  $("mkModalClose").addEventListener("click", closeModal);
+  $("mkMsgSeller") && $("mkMsgSeller").addEventListener("click", () => {
+    if (l.posted_by === (currentUser && currentUser.id)) { showToast("That is your own listing!"); return; }
+    closeModal();
+    setActiveView("chat");
+    showToast("Opening chat... find the seller in contacts.");
+  });
+  $("mkReportListing") && $("mkReportListing").addEventListener("click", () => {
+    openModal(`
+      <div class="modalTitle">&#128681; Report Listing</div>
+      <div class="field"><label>Reason</label>
+        <select id="mkReportReason">
+          <option value="scam">Scam / Fraud</option>
+          <option value="inappropriate">Inappropriate content</option>
+          <option value="fake">Fake listing</option>
+          <option value="other">Other</option>
+        </select>
+      </div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+        <button class="btn btnGhost" id="mkReportCancel">Cancel</button>
+        <button class="btn btnDanger" id="mkReportSubmit">Report</button>
+      </div>
+    `);
+    $("mkReportCancel").addEventListener("click", closeModal);
+    $("mkReportSubmit").addEventListener("click", async () => {
+      const reason = $("mkReportReason").value;
+      await supabaseClient.from("marketplace_reports").insert({ listing_id: l.id, reporter_id: currentUser && currentUser.id, reason });
+      closeModal();
+      showToast("Reported. Thank you!");
+    });
+  });
+  $("mkDeleteListing") && $("mkDeleteListing").addEventListener("click", async () => {
+    if (!confirm("Delete this listing?")) return;
+    const { error } = await supabaseClient.from("marketplace_listings").delete().eq("id", l.id).eq("posted_by", currentUser.id);
+    if (error) { showToast("Error: " + error.message); return; }
+    closeModal();
+    showToast("Listing deleted.");
+    loadMarketplace();
+  });
+}
+
+function openPostListingModal() {
+  openModal(`
+    <div class="modalTitle">&#128717; Post a Listing</div>
+    <div class="field">
+      <label>Type</label>
+      <select id="listTypeInput">
+        <option value="item">&#128717; Item for Sale</option>
+        <option value="job">&#128188; Job / Hiring</option>
+        <option value="service">&#128295; Service Offered</option>
+      </select>
+    </div>
+    <div class="field"><label>Title</label><input type="text" id="listTitleInput" placeholder="e.g. iPhone 13 Pro, Video Editor Needed..." /></div>
+    <div class="field"><label>Price / Budget (optional)</label><input type="number" id="listPriceInput" placeholder="e.g. 5000" /></div>
+    <div class="field" id="listCondField">
+      <label>Condition</label>
+      <select id="listCondInput">
+        <option value="new">Brand New</option>
+        <option value="used" selected>Used</option>
+        <option value="for parts">For Parts</option>
+      </select>
+    </div>
+    <div class="field"><label>Description</label><textarea id="listDescInput" rows="3" placeholder="Describe your listing..."></textarea></div>
+    <div class="field"><label>Location (optional)</label><input type="text" id="listLocInput" placeholder="e.g. Batac, Ilocos Norte" /></div>
+    <div class="field">
+      <label>Photo (optional)</label>
+      <div class="photoPickerWrap">
+        <input type="file" id="listPhotoFile" accept="image/*" class="hidden" />
+        <button type="button" class="btn btnGhost btnSm" id="btnPickListPhoto">📷 Choose photo</button>
+        <span id="listPhotoName" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+        <img id="listPhotoPreview" class="hidden" style="width:100%;max-height:160px;object-fit:cover;border-radius:12px;margin-top:8px" />
+      </div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+      <button class="btn btnGhost" id="listCancel">Cancel</button>
+      <button class="btn btnPrimary" id="listSubmit">Post Listing</button>
+    </div>
+  `);
+  $("listTypeInput").addEventListener("change", () => {
+    $("listCondField").classList.toggle("hidden", $("listTypeInput").value !== "item");
+  });
+  // Wire photo picker
+  $("btnPickListPhoto").addEventListener("click", () => $("listPhotoFile").click());
+  $("listPhotoFile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("listPhotoName").textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      $("listPhotoPreview").src = ev.target.result;
+      $("listPhotoPreview").classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+  });
+
+  $("listCancel").addEventListener("click", closeModal);
+  $("listSubmit").addEventListener("click", async () => {
+    const type = $("listTypeInput").value;
+    const title = $("listTitleInput").value.trim();
+    const price = $("listPriceInput").value.trim();
+    const condition = $("listCondInput").value;
+    const description = $("listDescInput").value.trim();
+    const location = $("listLocInput").value.trim();
+    const photoFile = $("listPhotoFile").files[0];
+    if (!title || !description) { showToast("Please fill in title and description."); return; }
+    const mod = moderateText(title + " " + description);
+
+    let photoUrl = null;
+    if (photoFile) {
+      const btn = $("listSubmit");
+      btn.disabled = true; btn.textContent = "Uploading…";
+      photoUrl = await uploadProfileImage(photoFile, "marketplace");
+      btn.disabled = false; btn.textContent = "Post Listing";
+    }
+
+    const { error } = await supabaseClient.from("marketplace_listings").insert({
+      title, description, type, condition,
+      price: price ? parseFloat(price) : null,
+      location: location || null,
+      photos: photoUrl ? [photoUrl] : [],
+      posted_by: currentUser ? currentUser.id : null,
+      poster_name: currentProfile ? currentProfile.full_name : "Seller",
+      poster_avatar: currentProfile ? currentProfile.avatar_url : null,
+      flagged: mod.flagged, flag_reason: mod.reason,
+    });
+    if (error) { showToast("Could not post: " + error.message); return; }
+    closeModal();
+    showToast(mod.flagged ? "Posted - pending review." : "Listing posted!");
+    loadMarketplace();
+    loadDashboardFeed();
+  });
+}
+if ($("btnPostListing")) $("btnPostListing").addEventListener("click", openPostListingModal);
+if ($("btnPostListingDash")) $("btnPostListingDash").addEventListener("click", openPostListingModal);
+
+// ---------------------------------------------------------------------------
+// Dashboard tiles — update values from already-loaded data
+// ---------------------------------------------------------------------------
+async function updateLatestUpdatesTile() {
+  const valEl = $("tileLatestVal");
+  const subEl = $("tileLatestSub");
+  if (!valEl || !subEl) return;
+  const { data, error } = await supabaseClient.from("feed_posts").select("title,created_at,pinned")
+    .order("pinned", { ascending: false }).order("created_at", { ascending: false }).limit(1);
+  if (error || !data || !data.length) {
+    valEl.textContent = "No updates";
+    subEl.textContent = "Check back soon";
+    return;
+  }
+  const latest = data[0];
+  valEl.textContent = latest.title && latest.title.length > 22 ? latest.title.slice(0, 22) + "…" : (latest.title || "Announcement");
+  subEl.textContent = (latest.pinned ? "📌 Pinned · " : "") + fmtDate(latest.created_at);
+}
+
+function updateDashTiles() {
+  // Meetings tile
+  const upcoming = parseInt($("mUpcoming")?.textContent || "0", 10);
+  if ($("tileMeetingVal")) $("tileMeetingVal").textContent = upcoming;
+  if ($("tileMeetingSub")) {
+    const firstItem = $("dashUpcomingList")?.querySelector(".itemTitle");
+    $("tileMeetingSub").textContent = firstItem ? firstItem.textContent : "No meetings yet";
+  }
+  // Storage tile (reads from existing storageLabel)
+  const storageLbl = $("storageLabel")?.textContent || "";
+  if ($("tileStorageVal") && storageLbl) {
+    const mbMatch = storageLbl.match(/([\d.]+)\s*MB/);
+    $("tileStorageVal").textContent = mbMatch ? mbMatch[1] + " MB" : "0 MB";
+  }
+  // VIP tile
+  const membership = computeMembershipStatus(currentProfile || {});
+  if ($("tileVipVal")) $("tileVipVal").textContent = membership.badgeText || "Free";
+  if ($("tileVipSub")) {
+    if (membership.state === "trialing" || membership.state === "active") {
+      $("tileVipSub").textContent = membership.detail || "Active";
+    } else {
+      $("tileVipSub").textContent = "Tap to upgrade ↗";
+    }
+  }
+  // Online friends tile
+  if ($("tileOnlineVal")) {
+    const count = Object.values(communityVipCache || {}).filter(r => r.is_online).length;
+    $("tileOnlineVal").textContent = count > 0 ? count : "—";
+  }
+}
+
+// Tile tap handlers
+const tileLatest = $("tileLatest");
+if (tileLatest) tileLatest.addEventListener("click", () => {
+  setActiveView("more");
+  const feedSubBtn = document.querySelector('#moreSubTabs .subTabBtn[data-sub="feed"]');
+  if (feedSubBtn) feedSubBtn.click();
+});
+const tileMeetings = $("tileMeetings");
+if (tileMeetings) tileMeetings.addEventListener("click", () => setActiveView("meetings"));
+const tileVip = $("tileVip");
+if (tileVip) tileVip.addEventListener("click", () => setActiveView("vip"));
+const tileQuickJoin = $("tileQuickJoin");
+if (tileQuickJoin) tileQuickJoin.addEventListener("click", () => $("qaInstant")?.click());
+
+// ---------------------------------------------------------------------------
+// Dashboard feed — tab switching (For You / Popular / Latest / Following)
+// ---------------------------------------------------------------------------
+let dashFeedActiveTab = "foryou";
+
+const dashFeedTabsEl = $("dashFeedTabs");
+if (dashFeedTabsEl) {
+  dashFeedTabsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".dashFeedTab");
+    if (!btn) return;
+    dashFeedTabsEl.querySelectorAll(".dashFeedTab").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    dashFeedActiveTab = btn.dataset.feedtab;
+    loadDashboardFeed();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Workspace scaffold — video upload + list
+// ---------------------------------------------------------------------------
+let wsActiveTab = "your-videos";
+
+const wsTabsEl = $("wsTabs");
+if (wsTabsEl) {
+  wsTabsEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".subTabBtn");
+    if (!btn) return;
+    wsTabsEl.querySelectorAll(".subTabBtn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    wsActiveTab = btn.dataset.wstab;
+    loadWorkspace();
+  });
+}
+
+const btnUploadVideo = $("btnUploadVideo");
+if (btnUploadVideo) btnUploadVideo.addEventListener("click", () => $("videoFileInput")?.click());
+
+const videoFileInput = $("videoFileInput");
+if (videoFileInput) {
+  videoFileInput.addEventListener("change", async (e) => {
+    const file = e.target.files[0];
+    e.target.value = "";
+    if (!file) return;
+    if (!file.type.startsWith("video/")) { showToast("Please choose a video file."); return; }
+    if (file.size > 500 * 1024 * 1024) { showToast("Video too large — max 500 MB."); return; }
+    openModal(`
+      <div class="modalTitle">🎬 Upload Video</div>
+      <div class="field"><label>Title</label><input type="text" id="vidTitleInput" placeholder="Give your video a title" /></div>
+      <div class="field"><label>Description</label><textarea id="vidDescInput" rows="3" placeholder="What's this video about?"></textarea></div>
+      <div class="field"><label>Tags (comma separated)</label><input type="text" id="vidTagsInput" placeholder="e.g. tutorial, vlog, coding" /></div>
+      <div class="field" style="display:flex;align-items:center;gap:10px">
+        <input type="checkbox" id="vidAllowDownload" style="width:20px;height:20px;accent-color:var(--navy)" />
+        <label for="vidAllowDownload" style="margin:0;font-weight:600">Allow download</label>
+      </div>
+      <div class="itemMeta" id="vidUploadProgress" style="margin-top:8px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
+        <button class="btn btnGhost" id="vidCancel">Cancel</button>
+        <button class="btn btnPrimary" id="vidSubmit">Upload</button>
+      </div>
+    `);
+    $("vidCancel").addEventListener("click", () => { closeModal(); });
+    $("vidSubmit").addEventListener("click", async () => {
+      const title = $("vidTitleInput").value.trim();
+      const desc = $("vidDescInput").value.trim();
+      const tags = $("vidTagsInput").value.split(",").map(t => t.trim()).filter(Boolean);
+      const allowDownload = $("vidAllowDownload").checked;
+      if (!title) { showToast("Please add a title."); return; }
+      const mod = moderateText(title + " " + desc);
+      if (mod.flagged) {
+        showToast("⚠️ Content flagged — video blocked.");
+        closeModal();
+        return;
+      }
+      const btn = $("vidSubmit");
+      btn.disabled = true; btn.textContent = "Uploading…";
+      const sizeMB = (file.size / 1024 / 1024).toFixed(1);
+      $("vidUploadProgress").textContent = `Uploading ${sizeMB} MB — please keep this open…`;
+      const ext = (file.name.split(".").pop() || "mp4").toLowerCase();
+      const path = `${currentUser.id}/videos/${Date.now()}.${ext}`;
+      const { error: upErr } = await supabaseClient.storage.from("videos").upload(path, file, { upsert: false });
+      if (upErr) { showToast("Upload failed: " + upErr.message); btn.disabled = false; btn.textContent = "Upload"; return; }
+      const { data: urlData } = supabaseClient.storage.from("videos").getPublicUrl(path);
+      const fileUrl = urlData.publicUrl;
+      const { error: dbErr } = await supabaseClient.from("videos").insert({
+        uploaded_by: currentUser.id,
+        uploader_name: currentProfile?.full_name || "Creator",
+        uploader_avatar: currentProfile?.avatar_url || null,
+        title, description: desc, tags,
+        file_path: path, allow_download: allowDownload,
+        view_count: 0, likes_count: 0,
+      });
+      if (dbErr) {
+        showToast("Could not save video info: " + dbErr.message);
+        btn.disabled = false; btn.textContent = "Upload";
+        return;
+      }
+      closeModal();
+      showToast("🎬 Video uploaded!");
+      loadWorkspace();
+    });
+  });
+}
+
+async function loadWorkspace() {
+  const list = $("wsVideoList");
+  if (!list || !currentUser) return;
+  list.innerHTML = `<div class="emptyState">Loading…</div>`;
+
+  if (wsActiveTab === "your-videos") {
+    const { data, error } = await supabaseClient.from("videos")
+      .select("*").eq("uploaded_by", currentUser.id).order("created_at", { ascending: false });
+    if (error || !data || !data.length) {
+      list.innerHTML = `<div class="emptyState">No videos yet — tap <strong>+ Upload</strong> to share your first video!</div>`;
+      return;
+    }
+    list.innerHTML = data.map(v => `
+      <div class="wsVideoCard" data-vid-id="${v.id}">
+        <div class="wsVideoThumb">${v.thumbnail_url ? `<img src="${escapeHtml(v.thumbnail_url)}" />` : `<div class="wsVideoThumbPlaceholder">🎬</div>`}</div>
+        <div class="wsVideoInfo">
+          <div class="wsVideoTitle">${escapeHtml(v.title)}</div>
+          <div class="itemMeta">👁 ${v.view_count || 0} views • ❤️ ${v.likes_count || 0} likes • ${fmtDate(v.created_at)}</div>
+          ${v.allow_download ? `<span class="badge" style="background:#e8f2fc;color:#1e40af;font-size:10px">⬇ Downloadable</span>` : ""}
+        </div>
+      </div>`).join("");
+
+    list.querySelectorAll("[data-vid-id]").forEach(card => {
+      const vid = data.find(v => v.id === card.dataset.vidId);
+      if (vid) card.addEventListener("click", () => openVideoPlayer(vid));
+    });
+
+  } else {
+    const { data: follows } = await supabaseClient.from("follows").select("followee_id").eq("follower_id", currentUser.id);
+    const followIds = (follows || []).map(f => f.followee_id);
+    let query = supabaseClient.from("videos").select("*").order("view_count", { ascending: false }).limit(20);
+    if (followIds.length) query = query.in("uploaded_by", followIds);
+    const { data, error } = await query;
+    if (error || !data || !data.length) {
+      list.innerHTML = `<div class="emptyState">No videos yet from people you follow.</div>`;
+      return;
+    }
+    list.innerHTML = data.map(v => `
+      <div class="wsVideoCard" data-vid-id="${v.id}">
+        <div class="wsVideoThumb">${v.thumbnail_url ? `<img src="${escapeHtml(v.thumbnail_url)}" />` : `<div class="wsVideoThumbPlaceholder">🎬</div>`}</div>
+        <div class="wsVideoInfo">
+          <div class="wsVideoTitle">${escapeHtml(v.title)}</div>
+          <div class="itemMeta">${nameLink(v.uploader_name || "Creator", getUserVipRow(v.uploaded_by), v.uploaded_by)} • 👁 ${v.view_count || 0}</div>
+        </div>
+      </div>`).join("");
+    list.querySelectorAll("[data-vid-id]").forEach(card => {
+      const vid = data.find(v => v.id === card.dataset.vidId);
+      if (vid) card.addEventListener("click", (e) => { if (e.target.closest("[data-open-profile]")) return; openVideoPlayer(vid); });
+    });
+  }
+}
+
+function openVideoPlayer(v) {
+  const { data: urlData } = supabaseClient.storage.from("videos").getPublicUrl(v.file_path);
+  const videoUrl = urlData?.publicUrl || "";
+  // Increment view count (fire and forget)
+  supabaseClient.rpc("increment_video_views", { p_video_id: v.id }).catch(() => {});
+  openModal(`
+    <div class="modalTitle">${escapeHtml(v.title)}</div>
+    <video class="wsVideoPlayer" controls ${v.allow_download ? "" : "controlsList=\"nodownload\""} style="-webkit-tap-highlight-color:transparent">
+      <source src="${escapeHtml(videoUrl)}" />Your browser does not support video.
+    </video>
+    <div class="itemMeta" style="margin:10px 0 4px">${escapeHtml(v.description || "")}</div>
+    <div class="itemMeta">👁 ${v.view_count || 0} views • ❤️ ${v.likes_count || 0} likes</div>
+    ${v.tags?.length ? `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">${v.tags.map(t => `<span class="badge" style="background:var(--panel2);color:var(--navy)">#${escapeHtml(t)}</span>`).join("")}</div>` : ""}
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px">
+      ${v.allow_download ? `<a class="btn btnGhost btnSm" href="${escapeHtml(videoUrl)}" download>⬇ Download</a>` : ""}
+      <button class="btn btnGhost" id="modalCancel">Close</button>
+    </div>
+  `);
+  $("modalCancel").addEventListener("click", closeModal);
+}
+
+// ---------------------------------------------------------------------------
+// DB: ensure videos table exists (create if first run)
+// ---------------------------------------------------------------------------
+async function ensureVideosTable() {
+  // Try to select from videos — if it errors with "relation does not exist", log it
+  // Actual table creation is done via Supabase migration (see continuity doc)
+  const { error } = await supabaseClient.from("videos").select("id").limit(1);
+  if (error && error.code === "42P01") {
+    console.warn("videos table not found — run Phase 6 migration");
+  }
+}
+ensureVideosTable();
+
+/* ============================================================
+   RUMBLE — Global Discussion (renamed from Forum)
+   ============================================================ */
+async function loadForum() {
+  const list = $("forumList");
+  if (!list) return;
+  await loadCommunityRoles();
+  const { data, error } = await supabaseClient.from("forum_posts")
+    .select("*").order("is_pinned", { ascending: false }).order("created_at", { ascending: false }).limit(50);
+  if (error) { list.innerHTML = `<div class="emptyState">Could not load threads.</div>`; return; }
+  const visible = (data || []).filter(f => !f.flagged || f.author_id === (currentUser && currentUser.id));
+  if (!visible.length) { list.innerHTML = `<div class="emptyState">No threads yet - start the conversation!</div>`; return; }
+  list.innerHTML = visible.map(f => {
+    const authorRole = getUserRoleLabel(f.author_id);
+    return `
+    <div class="rumbleCard${f.is_pinned ? " rumbleCard--pinned" : ""}" data-thread="${f.id}">
+      ${f.is_pinned ? `<div class="feedPinLabel">&#128204; Pinned</div>` : ""}
+      <div class="rumbleTitle">${escapeHtml(f.title || "")}${f.flagged ? ` <span class="badge" style="color:var(--danger);font-size:10px">Under review</span>` : ""}</div>
+      <div class="rumbleBody">${escapeHtml((f.body || "").slice(0, 120))}${(f.body || "").length > 120 ? "..." : ""}</div>
+      <div class="rumbleFoot">
+        <span class="rumbleAuthor">${nameLink(f.author_name || "Guest", getUserVipRow(f.author_id), f.author_id)} ${authorRole ? getRoleBadgeHtml(authorRole) : ""}</span>
+        <span class="rumbleMeta">${fmtDate(f.created_at)}</span>
+        <div class="rumbleActions">
+          <button class="rumbleBtn" data-like="${f.id}">&#10084; ${f.likes_count || 0}</button>
+          <button class="rumbleBtn" data-replies="${f.id}">&#128172; ${f.reply_count || 0}</button>
+          ${f.author_id !== (currentUser && currentUser.id) ? `<button class="rumbleBtn rumbleBtn--report" data-report="${f.id}">&#128681;</button>` : ""}
+          ${isAdminUser() ? `<button class="rumbleBtn rumbleBtn--delete" data-delete="${f.id}">&#128465;</button>` : ""}
+        </div>
+      </div>
+    </div>
+    `;
+  }).join("");
+  list.querySelectorAll("[data-like]").forEach(btn => btn.addEventListener("click", (e) => { e.stopPropagation(); likeThread(btn.dataset.like); }));
+  list.querySelectorAll("[data-report]").forEach(btn => btn.addEventListener("click", (e) => { e.stopPropagation(); reportThread(btn.dataset.report); }));
+  list.querySelectorAll("[data-delete]").forEach(btn => btn.addEventListener("click", (e) => { e.stopPropagation(); deleteThread(btn.dataset.delete); }));
+  list.querySelectorAll("[data-replies]").forEach(btn => btn.addEventListener("click", (e) => { e.stopPropagation(); const post = visible.find(f => f.id === btn.dataset.replies); openThreadReplies(btn.dataset.replies, post); }));
+  list.querySelectorAll(".rumbleCard").forEach(card => {
+    card.addEventListener("click", (e) => { if (e.target.closest("[data-open-profile]")) return; const post = visible.find(f => f.id === card.dataset.thread); openThreadReplies(card.dataset.thread, post); });
+  });
+}
+
+async function likeThread(postId) {
+  const { data: cur } = await supabaseClient.from("forum_posts").select("likes_count").eq("id", postId).single();
+  await supabaseClient.from("forum_posts").update({ likes_count: (cur ? cur.likes_count || 0 : 0) + 1 }).eq("id", postId);
+  loadForum();
+}
+
+async function reportThread(postId) {
+  openModal(`
+    <div class="modalTitle">&#128681; Report Thread</div>
+    <div class="field"><label>Reason</label>
+      <select id="threadReportReason">
+        <option value="spam">Spam</option>
+        <option value="scam">Scam / Fraud</option>
+        <option value="harassment">Harassment</option>
+        <option value="inappropriate">Inappropriate</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:12px">
+      <button class="btn btnGhost" id="threadReportCancel">Cancel</button>
+      <button class="btn btnDanger" id="threadReportSubmit">Report</button>
+    </div>
+  `);
+  $("threadReportCancel").addEventListener("click", closeModal);
+  $("threadReportSubmit").addEventListener("click", async () => {
+    const reason = $("threadReportReason").value;
+    await supabaseClient.from("forum_reports").insert({ post_id: postId, reporter_id: currentUser && currentUser.id, reason });
+    await supabaseClient.from("forum_posts").update({ flagged: true, flag_reason: reason }).eq("id", postId);
+    closeModal();
+    showToast("Reported. Thank you!");
+    loadForum();
+  });
+}
+
+async function deleteThread(postId) {
+  if (!confirm("Delete this thread?")) return;
+  await supabaseClient.from("forum_posts").delete().eq("id", postId);
+  showToast("Thread deleted.");
+  loadForum();
+}
+
+function openThreadReplies(postId, post) {
+  if (!post) return;
+  const authorRole = getUserRoleLabel(post.author_id);
+  openModal(`
+    <div class="modalTitle">&#128172; ${escapeHtml(post.title || "Thread")}</div>
+    <div class="rumbleModalBody">${escapeHtml(post.body || "")}</div>
+    <div class="rumbleModalMeta">${nameLink(post.author_name || "Guest", getUserVipRow(post.author_id), post.author_id)} ${authorRole ? getRoleBadgeHtml(authorRole) : ""} &bull; ${fmtDate(post.created_at)}</div>
+    <div class="cardTitle" style="font-size:13px;margin:12px 0 6px">Replies</div>
+    <div id="threadRepliesList"><div class="emptyState">Loading...</div></div>
+    <div class="field" style="margin-top:10px">
+      <textarea id="replyBodyInput" rows="2" placeholder="Write a reply..."></textarea>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px">
+      <button class="btn btnGhost" id="replyCancel">Close</button>
+      <button class="btn btnPrimary" id="replySubmit">Reply</button>
+    </div>
+  `);
+  $("replyCancel").addEventListener("click", closeModal);
+  (async () => {
+    const { data } = await supabaseClient.from("forum_comments").select("*").eq("post_id", postId).order("created_at").limit(50);
+    const replyList = $("threadRepliesList");
+    if (!replyList) return;
+    if (!data || !data.length) { replyList.innerHTML = `<div class="emptyState">No replies yet.</div>`; return; }
+    replyList.innerHTML = data.map(r => `
+      <div class="replyCard">
+        <span class="rumbleAuthor">${nameLink(r.author_name || "Guest", getUserVipRow(r.author_id), r.author_id)}</span>
+        <span class="rumbleMeta"> &bull; ${fmtDate(r.created_at)}</span>
+        <div style="margin-top:4px">${escapeHtml(r.body || "")}</div>
+      </div>
+    `).join("");
+  })();
+  $("replySubmit").addEventListener("click", async () => {
+    const body = $("replyBodyInput").value.trim();
+    if (!body) { showToast("Write something first."); return; }
+    const mod = moderateText(body);
+    const { error } = await supabaseClient.from("forum_comments").insert({
+      post_id: postId, body,
+      author_id: currentUser && currentUser.id, author_name: currentProfile ? currentProfile.full_name : "Guest",
+      flagged: mod.flagged, flag_reason: mod.reason,
+    });
+    if (error) { showToast("Error: " + error.message); return; }
+    const { data: cur } = await supabaseClient.from("forum_posts").select("reply_count").eq("id", postId).single();
+    await supabaseClient.from("forum_posts").update({ reply_count: (cur ? cur.reply_count || 0 : 0) + 1 }).eq("id", postId);
+    showToast("Reply posted!");
+    closeModal();
+    loadForum();
   });
 }
 
 $("btnNewThread").addEventListener("click", () => {
   openModal(`
-    <div class="modalTitle">Start a discussion</div>
-    <div class="field"><label>Title</label><input type="text" id="threadTitleInput" placeholder="What do you want to discuss?" /></div>
-    <div class="field"><label>Message</label><textarea id="threadBodyInput" rows="4" placeholder="Say more…"></textarea></div>
+    <div class="modalTitle">🔥 Start a Thread</div>
+    <div class="field"><label>Title</label><input type="text" id="threadTitleInput" placeholder="What's on your mind?" /></div>
+    <div class="field"><label>Message</label><textarea id="threadBodyInput" rows="4" placeholder="Tell the community..."></textarea></div>
+    <div class="field">
+      <label>Photo (optional)</label>
+      <div class="photoPickerWrap">
+        <input type="file" id="threadPhotoFile" accept="image/*" class="hidden" />
+        <button type="button" class="btn btnGhost btnSm" id="btnPickThreadPhoto">📷 Add photo</button>
+        <span id="threadPhotoName" style="font-size:12px;color:var(--muted);margin-left:8px"></span>
+        <img id="threadPhotoPreview" class="hidden" style="width:100%;max-height:140px;object-fit:cover;border-radius:12px;margin-top:8px" />
+      </div>
+    </div>
     <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:14px">
       <button class="btn btnGhost" id="threadPostCancel">Cancel</button>
       <button class="btn btnPrimary" id="threadPostSubmit">Post</button>
     </div>
   `);
+  $("btnPickThreadPhoto").addEventListener("click", () => $("threadPhotoFile").click());
+  $("threadPhotoFile").addEventListener("change", (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    $("threadPhotoName").textContent = file.name;
+    const reader = new FileReader();
+    reader.onload = ev => {
+      $("threadPhotoPreview").src = ev.target.result;
+      $("threadPhotoPreview").classList.remove("hidden");
+    };
+    reader.readAsDataURL(file);
+  });
   $("threadPostCancel").addEventListener("click", closeModal);
   $("threadPostSubmit").addEventListener("click", async () => {
     const title = $("threadTitleInput").value.trim();
     const body = $("threadBodyInput").value.trim();
     if (!title) { showToast("Please add a title."); return; }
     const mod = moderateText(title + " " + body);
+    const photoFile = $("threadPhotoFile").files[0];
+    let photoUrl = null;
+    if (photoFile) {
+      const btn = $("threadPostSubmit");
+      btn.disabled = true; btn.textContent = "Uploading…";
+      photoUrl = await uploadProfileImage(photoFile, "rumble");
+      btn.disabled = false; btn.textContent = "Post";
+    }
     const { error } = await supabaseClient.from("forum_posts").insert({
-      title, body, author_id: currentUser?.id || null, author_name: currentProfile?.full_name || "Guest",
+      title, body, author_id: currentUser ? currentUser.id : null,
+      author_name: currentProfile ? currentProfile.full_name : "Guest",
+      post_image_url: photoUrl || null,
       reply_count: 0, flagged: mod.flagged, flag_reason: mod.reason,
     });
     if (error) { showToast("Could not post: " + error.message); return; }
     closeModal();
-    showToast(mod.flagged ? "Posted — pending review (contains restricted content)." : "Discussion posted!");
+    showToast(mod.flagged ? "Posted - pending review." : "Thread posted!");
     loadForum();
+    loadDashboardFeed();
   });
 });
+
 
 /* ============================================================
    TWO-FACTOR AUTHENTICATION (TOTP via Supabase Auth MFA)
