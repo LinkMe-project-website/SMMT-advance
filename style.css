@@ -825,7 +825,6 @@ input:checked + .slider:before{transform:translateX(18px)}
 
 /* ===== NEWEST MEMBER ITEM ===== */
 .newestMemberItem{padding:12px 14px;background:var(--panel2);border-radius:12px;font-size:13px;color:var(--text)}
-<<<<<<< HEAD
 /* ===== VORTEXIA HERO SLIDER ===== */
 
 .heroSlider{
@@ -867,7 +866,6 @@ input:checked + .slider:before{transform:translateX(18px)}
   color:var(--muted);
   line-height:1.5;
 }
-=======
 
 /* ===== PHASE 2: PROFILE HEADER (cover + avatar) ===== */
 .profileHeaderCard{padding:0;overflow:hidden}
@@ -1096,4 +1094,3 @@ input:checked + .slider:before{transform:translateX(18px)}
   max-height: 280px; display: block;
 }
 
->>>>>>> f592f8e129953b75663ca33d8ac9eb0f6f7db73c
