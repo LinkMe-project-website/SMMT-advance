@@ -313,7 +313,7 @@ function setActiveView(view) {
   else if (view === "notifications") { $("pageSubtitle").textContent = ""; loadNotifications(); }
   else if (view === "recordings") { $("pageSubtitle").textContent = ""; renderRecordingsList(); }
   else if (view === "dashboard") { $("pageSubtitle").textContent = ""; loadDashboardFeed(); }
-  else if (view === "more") { $("pageSubtitle").textContent = "Marketplace, forum & announcements"; loadFeed(); loadMarketplace(); loadForum(); loadCommunityStats(); }
+  else if (view === "more") { $("pageSubtitle").textContent = "Marketplace, forum & announcements"; loadFeed(); loadMarketplaceUI(); loadForum(); loadCommunityStats(); }
   else $("pageSubtitle").textContent = "";
   if (view === "whiteboard" && !wbRoomId) renderWhiteboardPicker();
 }
@@ -4136,59 +4136,675 @@ if ($("btnPostAnnouncement")) {
 /* ============================================================
    MARKETPLACE — FB-style listings
    ============================================================ */
+// ============================================================================
+// 🛍️ PHASE 5A — BETTER MARKETPLACE STATE
+// ============================================================================
+
+let mkFilters = {
+  search: "",
+  type: "all",           // all, item, job, service
+  priceMin: 0,
+  priceMax: 999999,
+  condition: "all",      // all, new, used, for_parts
+  location: "",
+  sortBy: "newest",      // newest, price_low, price_high, most_viewed
+};
+
+let mkSavedListingIds = new Set();  // Cache of user's saved listing IDs
+let mkCurrentTab = "all";            // all, saved, my_listings, analytics
+
+// Old mkFilter (legacy) - kept for backwards compatibility if needed
 let mkFilter = "all";
 
-if (document.getElementById("mkFilterRow")) {
-  document.getElementById("mkFilterRow").addEventListener("click", (e) => {
-    const btn = e.target.closest(".mkFilterBtn");
-    if (!btn) return;
-    document.querySelectorAll(".mkFilterBtn").forEach(b => b.classList.toggle("active", b === btn));
-    mkFilter = btn.dataset.mkfilter;
-    loadMarketplace();
+async function loadMarketplace() {
+  // Proxy to new Phase 5A system
+  await loadMarketplaceUI();
+}
+
+// ============================================================================
+// MAIN MARKETPLACE UI LOADER
+// ============================================================================
+async function loadMarketplaceUI() {
+  const container = $("moreMarketplace");
+  if (!container) return;
+
+  // Load user's saved listings (if authenticated)
+  if (currentUser) {
+    await loadUserSavedListingIds();
+  }
+
+  // Render filter panel + tabs
+  renderMarketplaceFilters();
+
+  // Load initial listings based on current tab
+  if (mkCurrentTab === "all") {
+    await applyMarketplaceFilters();
+  } else if (mkCurrentTab === "saved") {
+    await loadSavedListings();
+  } else if (mkCurrentTab === "my_listings") {
+    await loadMyMarketplaceListings();
+  } else if (mkCurrentTab === "analytics") {
+    await loadMyListingsAnalytics();
+  }
+}
+
+// ============================================================================
+// RENDER FILTER PANEL & TABS
+// ============================================================================
+function renderMarketplaceFilters() {
+  const container = $("moreMarketplace");
+  if (!container) return;
+
+  let filterPanel = container.querySelector(".mkFilterPanel");
+  if (!filterPanel) {
+    filterPanel = document.createElement("div");
+    filterPanel.className = "mkFilterPanel";
+    container.insertBefore(filterPanel, container.firstChild);
+  }
+
+  filterPanel.innerHTML = `
+    <div class="mkFilterContainer">
+      <div class="mkFilterRow">
+        <input
+          type="text"
+          id="mkSearchInput"
+          class="mkSearchInput"
+          placeholder="🔍 Search listings..."
+          value="${escapeHtml(mkFilters.search)}"
+        />
+        <button class="btn btnGhost btnSm" id="mkClearFiltersBtn">Clear all</button>
+      </div>
+
+      <div class="mkFilterRow">
+        <div class="mkFilterGroup">
+          <label>Type</label>
+          <select id="mkTypeFilter">
+            <option value="all" ${mkFilters.type === "all" ? "selected" : ""}>All Types</option>
+            <option value="item" ${mkFilters.type === "item" ? "selected" : ""}>For Sale</option>
+            <option value="job" ${mkFilters.type === "job" ? "selected" : ""}>Jobs</option>
+            <option value="service" ${mkFilters.type === "service" ? "selected" : ""}>Services</option>
+          </select>
+        </div>
+
+        <div class="mkFilterGroup">
+          <label>Price Range (PHP)</label>
+          <div class="mkPriceRange">
+            <input
+              type="number"
+              id="mkPriceMin"
+              placeholder="Min"
+              value="${mkFilters.priceMin || ""}"
+              min="0"
+            />
+            <span>—</span>
+            <input
+              type="number"
+              id="mkPriceMax"
+              placeholder="Max"
+              value="${mkFilters.priceMax === 999999 ? "" : mkFilters.priceMax}"
+              min="0"
+            />
+          </div>
+        </div>
+
+        <div class="mkFilterGroup">
+          <label>Sort By</label>
+          <select id="mkSortBy">
+            <option value="newest" ${mkFilters.sortBy === "newest" ? "selected" : ""}>Newest First</option>
+            <option value="price_low" ${mkFilters.sortBy === "price_low" ? "selected" : ""}>Price: Low → High</option>
+            <option value="price_high" ${mkFilters.sortBy === "price_high" ? "selected" : ""}>Price: High → Low</option>
+            <option value="most_viewed" ${mkFilters.sortBy === "most_viewed" ? "selected" : ""}>Most Viewed</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="mkFilterRow">
+        <div class="mkFilterGroup">
+          <label>Condition</label>
+          <select id="mkConditionFilter">
+            <option value="all" ${mkFilters.condition === "all" ? "selected" : ""}>All Conditions</option>
+            <option value="new" ${mkFilters.condition === "new" ? "selected" : ""}>Brand New</option>
+            <option value="used" ${mkFilters.condition === "used" ? "selected" : ""}>Used</option>
+            <option value="for_parts" ${mkFilters.condition === "for_parts" ? "selected" : ""}>For Parts</option>
+          </select>
+        </div>
+
+        <div class="mkFilterGroup">
+          <label>Location</label>
+          <input
+            type="text"
+            id="mkLocationFilter"
+            placeholder="e.g., Manila"
+            value="${escapeHtml(mkFilters.location)}"
+          />
+        </div>
+      </div>
+    </div>
+
+    <div class="mkTabNav">
+      <button class="mkTabBtn ${mkCurrentTab === "all" ? "active" : ""}" data-mk-tab="all">
+        🛍️ All Listings
+      </button>
+      <button class="mkTabBtn ${mkCurrentTab === "saved" ? "active" : ""}" data-mk-tab="saved">
+        ❤️ Saved <span class="badge" id="mkSavedCount">${mkSavedListingIds.size}</span>
+      </button>
+      <button class="mkTabBtn ${mkCurrentTab === "my_listings" ? "active" : ""}" data-mk-tab="my_listings">
+        📤 My Listings
+      </button>
+      <button class="mkTabBtn ${mkCurrentTab === "analytics" ? "active" : ""}" data-mk-tab="analytics">
+        📊 Analytics
+      </button>
+    </div>
+  `;
+
+  attachMarketplaceFilterListeners();
+}
+
+// ============================================================================
+// ATTACH FILTER EVENT LISTENERS
+// ============================================================================
+function attachMarketplaceFilterListeners() {
+  const searchInput = $("mkSearchInput");
+  if (searchInput) {
+    searchInput.addEventListener("input", debounce(() => {
+      mkFilters.search = searchInput.value;
+      applyMarketplaceFilters();
+    }, 300));
+  }
+
+  const typeFilter = $("mkTypeFilter");
+  if (typeFilter) {
+    typeFilter.addEventListener("change", () => {
+      mkFilters.type = typeFilter.value;
+      applyMarketplaceFilters();
+    });
+  }
+
+  const priceMin = $("mkPriceMin");
+  const priceMax = $("mkPriceMax");
+  if (priceMin) {
+    priceMin.addEventListener("input", debounce(() => {
+      mkFilters.priceMin = priceMin.value ? parseInt(priceMin.value) : 0;
+      applyMarketplaceFilters();
+    }, 300));
+  }
+  if (priceMax) {
+    priceMax.addEventListener("input", debounce(() => {
+      mkFilters.priceMax = priceMax.value ? parseInt(priceMax.value) : 999999;
+      applyMarketplaceFilters();
+    }, 300));
+  }
+
+  const conditionFilter = $("mkConditionFilter");
+  if (conditionFilter) {
+    conditionFilter.addEventListener("change", () => {
+      mkFilters.condition = conditionFilter.value;
+      applyMarketplaceFilters();
+    });
+  }
+
+  const locationFilter = $("mkLocationFilter");
+  if (locationFilter) {
+    locationFilter.addEventListener("input", debounce(() => {
+      mkFilters.location = locationFilter.value;
+      applyMarketplaceFilters();
+    }, 300));
+  }
+
+  const sortBy = $("mkSortBy");
+  if (sortBy) {
+    sortBy.addEventListener("change", () => {
+      mkFilters.sortBy = sortBy.value;
+      applyMarketplaceFilters();
+    });
+  }
+
+  const clearBtn = $("mkClearFiltersBtn");
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      mkFilters = {
+        search: "",
+        type: "all",
+        priceMin: 0,
+        priceMax: 999999,
+        condition: "all",
+        location: "",
+        sortBy: "newest",
+      };
+      renderMarketplaceFilters();
+      applyMarketplaceFilters();
+    });
+  }
+
+  document.querySelectorAll(".mkTabBtn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      mkCurrentTab = btn.dataset.mkTab;
+      document.querySelectorAll(".mkTabBtn").forEach(b => b.classList.remove("active"));
+      btn.classList.add("active");
+      loadMarketplaceUI();
+    });
   });
 }
 
-async function loadMarketplace() {
+// ============================================================================
+// APPLY MARKETPLACE FILTERS & LOAD LISTINGS
+// ============================================================================
+async function applyMarketplaceFilters() {
   const grid = $("mkGrid");
   if (!grid) return;
-  let query = supabaseClient.from("marketplace_listings").select("*").order("created_at", { ascending: false }).limit(50);
-  if (mkFilter !== "all") query = query.eq("type", mkFilter);
-  const { data, error } = await query;
-  if (error) { grid.innerHTML = `<div class="emptyState">Could not load listings.</div>`; return; }
-  const visible = (data || []).filter(l => !l.flagged || l.posted_by === currentUser?.id);
-  if (!visible.length) { grid.innerHTML = `<div class="emptyState">No listings yet — be the first!</div>`; return; }
-  grid.innerHTML = visible.map(l => {
+
+  grid.innerHTML = '<div class="emptyState">Loading...</div>';
+
+  try {
+    let query = supabaseClient.from("marketplace_listings").select("*");
+
+    if (mkFilters.type !== "all") {
+      query = query.eq("type", mkFilters.type);
+    }
+    if (mkFilters.condition !== "all") {
+      query = query.eq("condition", mkFilters.condition);
+    }
+    if (mkFilters.priceMin > 0) {
+      query = query.gte("price", mkFilters.priceMin);
+    }
+    if (mkFilters.priceMax < 999999) {
+      query = query.lte("price", mkFilters.priceMax);
+    }
+
+    if (mkFilters.sortBy === "newest") {
+      query = query.order("created_at", { ascending: false });
+    } else if (mkFilters.sortBy === "most_viewed") {
+      query = query.order("view_count", { ascending: false });
+    } else if (mkFilters.sortBy === "price_low") {
+      query = query.order("price", { ascending: true });
+    } else if (mkFilters.sortBy === "price_high") {
+      query = query.order("price", { ascending: false });
+    }
+
+    query = query.limit(50);
+    const { data, error } = await query;
+
+    if (error) {
+      grid.innerHTML = `<div class="emptyState">❌ Could not load listings: ${escapeHtml(error.message)}</div>`;
+      return;
+    }
+
+    let listings = data || [];
+
+    if (mkFilters.search) {
+      const searchLower = mkFilters.search.toLowerCase();
+      listings = listings.filter(l =>
+        (l.title && l.title.toLowerCase().includes(searchLower)) ||
+        (l.description && l.description.toLowerCase().includes(searchLower))
+      );
+    }
+
+    if (mkFilters.location) {
+      const locLower = mkFilters.location.toLowerCase();
+      listings = listings.filter(l =>
+        l.location && l.location.toLowerCase().includes(locLower)
+      );
+    }
+
+    listings = listings.filter(l => !l.flagged || l.posted_by === currentUser?.id);
+
+    if (!listings.length) {
+      grid.innerHTML = `<div class="emptyState">📭 No listings match your filters.</div>`;
+      return;
+    }
+
+    renderMarketplaceListings(listings);
+  } catch (err) {
+    console.error("Marketplace filter error:", err);
+    grid.innerHTML = `<div class="emptyState">❌ Error loading listings.</div>`;
+  }
+}
+
+// ============================================================================
+// RENDER MARKETPLACE LISTING CARDS
+// ============================================================================
+function renderMarketplaceListings(listings) {
+  const grid = $("mkGrid");
+  if (!grid) return;
+
+  grid.innerHTML = listings.map(l => {
     const photo = l.photos && l.photos[0] ? l.photos[0] : null;
-    const typeIcon = l.type === "job" ? "&#128188;" : l.type === "service" ? "&#128295;" : "&#128717;";
-    const condLabel = l.condition === "new" ? "Brand New" : l.condition === "used" ? "Used" : l.condition === "for parts" ? "For Parts" : (l.condition || "");
-    const priceDisplay = l.price ? "&#8369;" + Number(l.price).toLocaleString() : (l.budget_php ? "&#8369;" + Number(l.budget_php).toLocaleString() : "Negotiable");
+    const typeIcon = l.type === "job" ? "💼" : l.type === "service" ? "🔧" : "🛍️";
+    const condLabel = l.condition === "new" ? "New" : l.condition === "used" ? "Used" : l.condition === "for_parts" ? "For Parts" : "";
+    const priceDisplay = l.price ? "₱" + Number(l.price).toLocaleString() : "Negotiable";
+    const isSaved = mkSavedListingIds.has(l.id);
+
     return `
       <div class="mkCard" data-mk-id="${l.id}">
-        <div class="mkPhoto">${photo ? `<img src="${escapeHtml(photo)}" alt="" loading="lazy" />` : `<div class="mkPhotoPlaceholder">${typeIcon}</div>`}</div>
-        <div class="mkInfo">
-          <div class="mkTitle">${escapeHtml(l.title || "")}</div>
-          <div class="mkPrice">${priceDisplay}</div>
-          <div class="mkMeta">
-            ${condLabel ? `<span class="mkCondBadge">${escapeHtml(condLabel)}</span>` : ""}
-            ${l.location ? `<span class="mkLoc">&#128205; ${escapeHtml(l.location)}</span>` : ""}
-            ${l.flagged ? `<span class="badge" style="color:var(--danger);font-size:10px">Under review</span>` : ""}
+        <div class="mkCardImage">
+          ${photo
+            ? `<img src="${escapeHtml(photo)}" alt="" loading="lazy" />`
+            : `<div class="mkCardPlaceholder">${typeIcon}</div>`
+          }
+          <button class="mkCardSaveBtn ${isSaved ? "saved" : ""}" data-mk-save="${l.id}" title="${isSaved ? "Unsave" : "Save"}">
+            ${isSaved ? "❤️" : "🤍"}
+          </button>
+        </div>
+        <div class="mkCardContent">
+          <div class="mkCardTitle">${escapeHtml(l.title || "")}</div>
+          <div class="mkCardPrice">${priceDisplay}</div>
+          <div class="mkCardMeta">
+            ${condLabel ? `<span class="mkCardBadge">${condLabel}</span>` : ""}
+            ${l.location ? `<span class="mkCardLoc">📍 ${escapeHtml(l.location)}</span>` : ""}
+            ${l.view_count ? `<span class="mkCardViews">👁️ ${l.view_count}</span>` : ""}
           </div>
-          <div class="mkSellerRow">
-            <span class="mkSellerName">${nameLink(l.poster_name || "Seller", getUserVipRow(l.posted_by), l.posted_by)}</span>
-            <span class="mkTime">${fmtDate(l.created_at)}</span>
+          <div class="mkCardSeller">
+            <span>${nameLink(l.poster_name || "Seller", getUserVipRow(l.posted_by), l.posted_by)}</span>
+            <span class="mkCardTime">${fmtDate(l.created_at)}</span>
           </div>
         </div>
       </div>
     `;
   }).join("");
+
   grid.querySelectorAll("[data-mk-id]").forEach(card => {
-    const item = visible.find(l => l.id === card.dataset.mkId);
-    card.addEventListener("click", (e) => { if (e.target.closest("[data-open-profile]")) return; openMarketplaceDetail(item); });
+    const item = listings.find(l => l.id === card.dataset.mkId);
+    card.addEventListener("click", (e) => {
+      if (e.target.closest("[data-mk-save]")) return;
+      if (e.target.closest("[data-open-profile]")) return;
+      openMarketplaceDetail(item);
+    });
   });
+
+  grid.querySelectorAll("[data-mk-save]").forEach(btn => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const listingId = btn.dataset.mkSave;
+      toggleSaveListing(listingId);
+    });
+  });
+}
+
+// ============================================================================
+// TOGGLE SAVE LISTING
+// ============================================================================
+async function toggleSaveListing(listingId) {
+  if (!currentUser) {
+    showToast("Log in to save listings");
+    return;
+  }
+
+  try {
+    const isSaved = mkSavedListingIds.has(listingId);
+
+    if (isSaved) {
+      const { error } = await supabaseClient
+        .from("saved_listings")
+        .delete()
+        .eq("user_id", currentUser.id)
+        .eq("listing_id", listingId);
+
+      if (error) throw error;
+      mkSavedListingIds.delete(listingId);
+      showToast("Removed from saved");
+    } else {
+      const { error } = await supabaseClient
+        .from("saved_listings")
+        .insert({
+          user_id: currentUser.id,
+          listing_id: listingId,
+        });
+
+      if (error) throw error;
+      mkSavedListingIds.add(listingId);
+      showToast("Added to saved ❤️");
+    }
+
+    const btn = document.querySelector(`[data-mk-save="${listingId}"]`);
+    if (btn) {
+      btn.classList.toggle("saved");
+      btn.textContent = mkSavedListingIds.has(listingId) ? "❤️" : "🤍";
+      btn.title = mkSavedListingIds.has(listingId) ? "Unsave" : "Save";
+    }
+
+    const countBadge = $("mkSavedCount");
+    if (countBadge) {
+      countBadge.textContent = mkSavedListingIds.size;
+    }
+  } catch (err) {
+    console.error("Save listing error:", err);
+    showToast("Error saving listing");
+  }
+}
+
+// ============================================================================
+// LOAD USER'S SAVED LISTING IDS (for caching)
+// ============================================================================
+async function loadUserSavedListingIds() {
+  if (!currentUser) return;
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("saved_listings")
+      .select("listing_id")
+      .eq("user_id", currentUser.id);
+
+    if (error) throw error;
+
+    mkSavedListingIds = new Set((data || []).map(s => s.listing_id));
+  } catch (err) {
+    console.error("Error loading saved listings:", err);
+  }
+}
+
+// ============================================================================
+// LOAD SAVED LISTINGS VIEW
+// ============================================================================
+async function loadSavedListings() {
+  const grid = $("mkGrid");
+  if (!grid) return;
+
+  grid.innerHTML = '<div class="emptyState">Loading...</div>';
+
+  if (!currentUser) {
+    grid.innerHTML = '<div class="emptyState">🔐 Log in to view saved listings</div>';
+    return;
+  }
+
+  try {
+    const { data: saved, error: savedError } = await supabaseClient
+      .from("saved_listings")
+      .select("listing_id")
+      .eq("user_id", currentUser.id)
+      .order("created_at", { ascending: false });
+
+    if (savedError) throw savedError;
+
+    if (!saved || !saved.length) {
+      grid.innerHTML = '<div class="emptyState">❤️ No saved listings yet</div>';
+      return;
+    }
+
+    const listingIds = saved.map(s => s.listing_id);
+
+    const { data: listings, error: listingsError } = await supabaseClient
+      .from("marketplace_listings")
+      .select("*")
+      .in("id", listingIds);
+
+    if (listingsError) throw listingsError;
+
+    if (!listings || !listings.length) {
+      grid.innerHTML = '<div class="emptyState">❤️ Your saved listings were deleted</div>';
+      return;
+    }
+
+    renderMarketplaceListings(listings);
+  } catch (err) {
+    console.error("Error loading saved listings:", err);
+    grid.innerHTML = `<div class="emptyState">❌ Error loading saved listings</div>`;
+  }
+}
+
+// ============================================================================
+// LOAD MY MARKETPLACE LISTINGS
+// ============================================================================
+async function loadMyMarketplaceListings() {
+  const grid = $("mkGrid");
+  if (!grid) return;
+
+  grid.innerHTML = '<div class="emptyState">Loading...</div>';
+
+  if (!currentUser) {
+    grid.innerHTML = '<div class="emptyState">🔐 Log in to view your listings</div>';
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("marketplace_listings")
+      .select("*")
+      .eq("posted_by", currentUser.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    if (!data || !data.length) {
+      grid.innerHTML = `
+        <div class="emptyState">
+          📭 No listings yet
+          <br/><button class="btn btnPrimary btnSm" onclick="openPostListingModal()" style="margin-top:10px">+ Post a Listing</button>
+        </div>
+      `;
+      return;
+    }
+
+    renderMarketplaceListings(data);
+  } catch (err) {
+    console.error("Error loading my listings:", err);
+    grid.innerHTML = `<div class="emptyState">❌ Error loading listings</div>`;
+  }
+}
+
+// ============================================================================
+// LOAD ANALYTICS DASHBOARD
+// ============================================================================
+async function loadMyListingsAnalytics() {
+  const grid = $("mkGrid");
+  if (!grid) return;
+
+  grid.innerHTML = '<div class="emptyState">Loading...</div>';
+
+  if (!currentUser) {
+    grid.innerHTML = '<div class="emptyState">🔐 Log in to view analytics</div>';
+    return;
+  }
+
+  try {
+    const { data, error } = await supabaseClient
+      .from("marketplace_listings")
+      .select("*")
+      .eq("posted_by", currentUser.id)
+      .order("created_at", { ascending: false });
+
+    if (error) throw error;
+
+    if (!data || !data.length) {
+      grid.innerHTML = `
+        <div class="emptyState">
+          📊 No listings to analyze
+          <br/><button class="btn btnPrimary btnSm" onclick="openPostListingModal()" style="margin-top:10px">+ Post a Listing</button>
+        </div>
+      `;
+      return;
+    }
+
+    const totalViews = data.reduce((sum, l) => sum + (l.view_count || 0), 0);
+    const totalListings = data.length;
+    const avgViewsPerListing = totalListings > 0 ? Math.round(totalViews / totalListings) : 0;
+    const topListing = data.sort((a, b) => (b.view_count || 0) - (a.view_count || 0))[0];
+
+    grid.innerHTML = `
+      <div class="mkAnalyticsDashboard">
+        <div class="mkAnalyticsSummary">
+          <div class="mkAnalyticsStat">
+            <div class="mkAnalyticsValue">${totalListings}</div>
+            <div class="mkAnalyticsLabel">Active Listings</div>
+          </div>
+          <div class="mkAnalyticsStat">
+            <div class="mkAnalyticsValue">${totalViews.toLocaleString()}</div>
+            <div class="mkAnalyticsLabel">Total Views</div>
+          </div>
+          <div class="mkAnalyticsStat">
+            <div class="mkAnalyticsValue">${avgViewsPerListing}</div>
+            <div class="mkAnalyticsLabel">Avg Views/Listing</div>
+          </div>
+        </div>
+
+        <div class="mkAnalyticsTopListing">
+          <div class="mkAnalyticsLabel">🏆 Top Performer</div>
+          ${topListing ? `
+            <div class="mkAnalyticsListingCard">
+              <div class="mkAnalyticsListingTitle">${escapeHtml(topListing.title)}</div>
+              <div class="mkAnalyticsListingViews">👁️ ${topListing.view_count || 0} views</div>
+              ${topListing.price ? `<div class="mkAnalyticsListingPrice">₱${Number(topListing.price).toLocaleString()}</div>` : ""}
+              <div class="mkAnalyticsListingAge">${fmtDate(topListing.created_at)}</div>
+            </div>
+          ` : ""}
+        </div>
+
+        <div class="mkAnalyticsListings">
+          <div class="mkAnalyticsLabel">All Your Listings</div>
+          ${data.map(l => `
+            <div class="mkAnalyticsListingItem">
+              <div class="mkAnalyticsListingInfo">
+                <div class="mkAnalyticsItemTitle">${escapeHtml(l.title)}</div>
+                <div class="mkAnalyticsItemMeta">
+                  ${l.price ? `₱${Number(l.price).toLocaleString()} • ` : ""}
+                  ${fmtDate(l.created_at)}
+                </div>
+              </div>
+              <div class="mkAnalyticsItemStats">
+                <span>👁️ ${l.view_count || 0}</span>
+                <span>❤️ ${l.likes_count || 0}</span>
+              </div>
+            </div>
+          `).join("")}
+        </div>
+      </div>
+    `;
+  } catch (err) {
+    console.error("Error loading analytics:", err);
+    grid.innerHTML = `<div class="emptyState">❌ Error loading analytics</div>`;
+  }
+}
+
+// ============================================================================
+// INCREMENT LISTING VIEW COUNT
+// ============================================================================
+async function incrementListingViews(listingId) {
+  try {
+    const { data: listing, error: getError } = await supabaseClient
+      .from("marketplace_listings")
+      .select("view_count")
+      .eq("id", listingId)
+      .single();
+
+    if (getError) throw getError;
+
+    const newCount = (listing?.view_count || 0) + 1;
+
+    const { error: updateError } = await supabaseClient
+      .from("marketplace_listings")
+      .update({ view_count: newCount })
+      .eq("id", listingId);
+
+    if (updateError) throw updateError;
+  } catch (err) {
+    console.error("Error incrementing view count:", err);
+  }
 }
 
 function openMarketplaceDetail(l) {
   if (!l) return;
+
+  // 🎯 PHASE 5A: Track view
+  incrementListingViews(l.id);
   const typeIcon = l.type === "job" ? "&#128188;" : l.type === "service" ? "&#128295;" : "&#128717;";
   const condLabel = l.condition === "new" ? "Brand New" : l.condition === "used" ? "Used" : l.condition === "for parts" ? "For Parts" : (l.condition || "");
   const photos = l.photos && l.photos.length ? l.photos : [];
